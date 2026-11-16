@@ -15,6 +15,8 @@ import { MenusModule } from './modules/menus/menus.module';
 import { NoticesModule } from './modules/notices/notices.module';
 import { AuditModule } from './modules/audit/audit.module';
 import { SchedulerModule } from './modules/scheduler/scheduler.module';
+import { RosterModule } from './modules/roster/roster.module';
+import { ExpensesModule } from './modules/expenses/expenses.module';
 
 @Module({
   imports: [
@@ -40,7 +42,9 @@ import { SchedulerModule } from './modules/scheduler/scheduler.module';
     MenusModule,
     NoticesModule,
     AuditModule,
-    SchedulerModule
+    SchedulerModule,
+    RosterModule,
+    ExpensesModule
   ]
 })
 export class AppModule {}

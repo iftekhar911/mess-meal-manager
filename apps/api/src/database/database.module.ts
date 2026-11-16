@@ -14,6 +14,11 @@ import { LedgerEntryEntity } from './entities/ledger-entry.entity';
 import { MonthlySettingsEntity } from './entities/monthly-settings.entity';
 import { NoticeEntity } from './entities/notice.entity';
 import { AuditLogEntity } from './entities/audit-log.entity';
+import { ShoppingRosterEntity } from './entities/shopping-roster.entity';
+import { SwapRequestEntity } from './entities/swap-request.entity';
+import { ShoppingExpenseEntity } from './entities/shopping-expense.entity';
+import { ExpenseItemEntity } from './entities/expense-item.entity';
+import { FuelExpenseEntity } from './entities/fuel-expense.entity';
 
 const ALL_ENTITIES = [
   UserEntity,
@@ -28,7 +33,12 @@ const ALL_ENTITIES = [
   LedgerEntryEntity,
   MonthlySettingsEntity,
   NoticeEntity,
-  AuditLogEntity
+  AuditLogEntity,
+  ShoppingRosterEntity,
+  SwapRequestEntity,
+  ShoppingExpenseEntity,
+  ExpenseItemEntity,
+  FuelExpenseEntity
 ];
 
 /**

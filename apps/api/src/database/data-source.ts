@@ -13,6 +13,12 @@ import { MonthlySettingsEntity } from './entities/monthly-settings.entity';
 import { NoticeEntity } from './entities/notice.entity';
 import { AuditLogEntity } from './entities/audit-log.entity';
 
+import { ShoppingRosterEntity } from './entities/shopping-roster.entity';
+import { SwapRequestEntity } from './entities/swap-request.entity';
+import { ShoppingExpenseEntity } from './entities/shopping-expense.entity';
+import { ExpenseItemEntity } from './entities/expense-item.entity';
+import { FuelExpenseEntity } from './entities/fuel-expense.entity';
+
 export const AppDataSource = new DataSource({
   type: 'postgres',
   host: process.env.DB_HOST || 'localhost',
@@ -35,7 +41,12 @@ export const AppDataSource = new DataSource({
     LedgerEntryEntity,
     MonthlySettingsEntity,
     NoticeEntity,
-    AuditLogEntity
+    AuditLogEntity,
+    ShoppingRosterEntity,
+    SwapRequestEntity,
+    ShoppingExpenseEntity,
+    ExpenseItemEntity,
+    FuelExpenseEntity
   ],
   migrations: [__dirname + '/migrations/*{.ts,.js}']
 });

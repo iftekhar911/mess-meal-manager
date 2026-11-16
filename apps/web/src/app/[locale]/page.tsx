@@ -11,6 +11,7 @@ import {
   MessDto,
   MembershipDto,
   ShopperDailySummaryDto,
+  BalanceStatus,
   getDhakaDateString
 } from '@mess/shared';
 import { useAuth } from '@/lib/auth-context';
@@ -27,6 +28,8 @@ import { ShopperSummary } from '@/components/features/shopper-summary/shopper-su
 import { MealPreferences } from '@/components/features/meal-preferences/meal-preferences';
 import { LedgerView } from '@/components/features/ledger/ledger-view';
 import { NoticeBoard } from '@/components/features/notices/notice-board';
+import { RosterCalendar } from '@/components/features/roster/roster-calendar';
+import { ShoppingExpenses } from '@/components/features/expenses/shopping-expenses';
 import { useRouter } from '@/i18n/routing';
 
 export default function HomePage() {
@@ -98,6 +101,18 @@ export default function HomePage() {
         token || undefined
       ),
     enabled: !!currentMess?.id && activeTab === 'shopper'
+  });
+
+  // Fetch real-time balance status for user's avatar ring
+  const { data: myBalance } = useQuery<{ status: BalanceStatus }>({
+    queryKey: ['my-balance', currentMess?.id, currentMembership?.id],
+    queryFn: () =>
+      apiFetch<{ status: BalanceStatus }>(
+        `/messes/${currentMess?.id}/ledger/balance/${currentMembership?.id}`,
+        {},
+        token || undefined
+      ),
+    enabled: !!currentMess?.id && !!currentMembership?.id
   });
 
   const {
@@ -181,7 +196,12 @@ export default function HomePage() {
           </div>
           <div className="flex items-center gap-3">
             <LanguageSwitcher />
-            <Avatar name={user.name} avatarUrl={user.avatarUrl} size="sm" />
+            <Avatar
+              name={user.name}
+              avatarUrl={user.avatarUrl}
+              size="sm"
+              status={myBalance?.status}
+            />
             <Button variant="ghost" size="sm" onClick={() => logout()}>
               {tCommon('logout')}
             </Button>
@@ -253,16 +273,31 @@ export default function HomePage() {
               />
             )}
 
-            {activeTab === 'shopper' &&
-              (shopperSummary ? (
-                <ShopperSummary
-                  summary={shopperSummary}
+            {activeTab === 'shopper' && currentMess && currentMembership && (
+              <div className="space-y-6">
+                {shopperSummary ? (
+                  <ShopperSummary
+                    summary={shopperSummary}
+                    token={token || undefined}
+                    isShopperOrManager={isManager}
+                  />
+                ) : (
+                  <p className="text-sm text-text-secondary">{tCommon('loading')}</p>
+                )}
+                <RosterCalendar
+                  messId={currentMess.id}
+                  membershipId={currentMembership.id}
+                  isManager={isManager}
+                  shoppersPerDay={currentMess.shoppersPerDay}
                   token={token || undefined}
-                  isShopperOrManager={isManager}
                 />
-              ) : (
-                <p className="text-sm text-text-secondary">{tCommon('loading')}</p>
-              ))}
+                <ShoppingExpenses
+                  messId={currentMess.id}
+                  isManager={isManager}
+                  token={token || undefined}
+                />
+              </div>
+            )}
 
             {activeTab === 'ledger' && currentMess && currentMembership && (
               <LedgerView
