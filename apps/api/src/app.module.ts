@@ -9,6 +9,12 @@ import { AuthModule } from './modules/auth/auth.module';
 import { UsersModule } from './modules/users/users.module';
 import { MessesModule } from './modules/messes/messes.module';
 import { MembershipsModule } from './modules/memberships/memberships.module';
+import { MealsModule } from './modules/meals/meals.module';
+import { LedgerModule } from './modules/ledger/ledger.module';
+import { MenusModule } from './modules/menus/menus.module';
+import { NoticesModule } from './modules/notices/notices.module';
+import { AuditModule } from './modules/audit/audit.module';
+import { SchedulerModule } from './modules/scheduler/scheduler.module';
 
 @Module({
   imports: [
@@ -28,7 +34,13 @@ import { MembershipsModule } from './modules/memberships/memberships.module';
     AuthModule,
     UsersModule,
     MessesModule,
-    MembershipsModule
+    MembershipsModule,
+    MealsModule,
+    LedgerModule,
+    MenusModule,
+    NoticesModule,
+    AuditModule,
+    SchedulerModule
   ]
 })
 export class AppModule {}

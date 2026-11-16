@@ -5,7 +5,14 @@ import { useTranslations } from 'next-intl';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { CreateMessSchema, CreateMessInput, MessDto } from '@mess/shared';
+import {
+  CreateMessSchema,
+  CreateMessInput,
+  MessDto,
+  MembershipDto,
+  ShopperDailySummaryDto,
+  getDhakaDateString
+} from '@mess/shared';
 import { useAuth } from '@/lib/auth-context';
 import { apiFetch } from '@/lib/api-client';
 import { Button } from '@/components/ui/button';
@@ -15,6 +22,11 @@ import { Modal } from '@/components/ui/modal';
 import { Avatar } from '@/components/ui/avatar';
 import { PageHeader } from '@/components/ui/page-header';
 import { LanguageSwitcher } from '@/components/ui/language-switcher';
+import { MealHeatmap, HeatmapRow } from '@/components/features/meal-heatmap/meal-heatmap';
+import { ShopperSummary } from '@/components/features/shopper-summary/shopper-summary';
+import { MealPreferences } from '@/components/features/meal-preferences/meal-preferences';
+import { LedgerView } from '@/components/features/ledger/ledger-view';
+import { NoticeBoard } from '@/components/features/notices/notice-board';
 import { useRouter } from '@/i18n/routing';
 
 export default function HomePage() {
@@ -32,6 +44,10 @@ export default function HomePage() {
   } = useAuth();
   const router = useRouter();
   const queryClient = useQueryClient();
+
+  const [activeTab, setActiveTab] = useState<
+    'meals' | 'heatmap' | 'shopper' | 'ledger' | 'notices'
+  >('meals');
   const [isCreateMessOpen, setIsCreateMessOpen] = useState(false);
 
   // Fetch messes for user
@@ -39,6 +55,49 @@ export default function HomePage() {
     queryKey: ['my-messes', token],
     queryFn: () => apiFetch<MessDto[]>('/messes/my', {}, token || undefined),
     enabled: !!token
+  });
+
+  const currentMess = messes?.find((m) => m.id === activeMessId) || messes?.[0];
+
+  // Fetch user's membership in active mess
+  const { data: members } = useQuery<MembershipDto[]>({
+    queryKey: ['mess-members', currentMess?.id],
+    queryFn: () =>
+      apiFetch<MembershipDto[]>(`/messes/${currentMess?.id}/members`, {}, token || undefined),
+    enabled: !!currentMess?.id
+  });
+
+  const currentMembership = members?.find((m) => m.userId === user?.id);
+  const isManager = currentMembership?.role === 'MANAGER';
+
+  // Fetch heatmap for active mess
+  const currentMonth = getDhakaDateString().slice(0, 7);
+  const { data: heatmapData } = useQuery<{
+    month: string;
+    daysInMonth: number;
+    rows: HeatmapRow[];
+  }>({
+    queryKey: ['heatmap', currentMess?.id, currentMonth],
+    queryFn: () =>
+      apiFetch(
+        `/messes/${currentMess?.id}/meals/heatmap?month=${currentMonth}`,
+        {},
+        token || undefined
+      ),
+    enabled: !!currentMess?.id && (activeTab === 'heatmap' || activeTab === 'meals')
+  });
+
+  // Fetch shopper summary
+  const todayStr = getDhakaDateString();
+  const { data: shopperSummary } = useQuery<ShopperDailySummaryDto>({
+    queryKey: ['shopper-summary', currentMess?.id, todayStr],
+    queryFn: () =>
+      apiFetch<ShopperDailySummaryDto>(
+        `/messes/${currentMess?.id}/meals/shopper-summary?date=${todayStr}`,
+        {},
+        token || undefined
+      ),
+    enabled: !!currentMess?.id && activeTab === 'shopper'
   });
 
   const {
@@ -107,11 +166,9 @@ export default function HomePage() {
     );
   }
 
-  const currentMess = messes?.find((m) => m.id === activeMessId) || messes?.[0];
-
   return (
     <div className="min-h-screen bg-background">
-      {/* Top Navigation */}
+      {/* Top Header */}
       <header className="border-b border-border bg-surface px-4 py-3 sticky top-0 z-30 shadow-sm">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -132,7 +189,7 @@ export default function HomePage() {
         </div>
       </header>
 
-      {/* Main Container */}
+      {/* Main Content Area */}
       <main className="max-w-7xl mx-auto p-4 space-y-6">
         <PageHeader
           title={currentMess ? currentMess.name : tMess('selectMess')}
@@ -146,7 +203,6 @@ export default function HomePage() {
           }
         />
 
-        {/* Mess overview or Empty state */}
         {isMessesLoading ? (
           <p className="text-text-secondary">{tCommon('loading')}</p>
         ) : !messes || messes.length === 0 ? (
@@ -156,37 +212,75 @@ export default function HomePage() {
             <Button onClick={() => setIsCreateMessOpen(true)}>{tMess('createButton')}</Button>
           </Card>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            <Card>
-              <h3 className="font-semibold text-text-primary mb-2">{tNav('meals')}</h3>
-              <p className="text-sm text-text-secondary mb-4">
-                {tMess('mealRate')}: {currentMess?.mealRate} {tCommon('bdt')}
-              </p>
-              <Button variant="secondary" size="sm" className="w-full">
-                {tCommon('actions')}
-              </Button>
-            </Card>
+          <>
+            {/* Feature Navigation Tabs */}
+            <div className="flex items-center gap-2 overflow-x-auto pb-1 border-b border-border">
+              {[
+                { key: 'meals', label: tNav('meals') },
+                { key: 'heatmap', label: tNav('heatmap') },
+                { key: 'shopper', label: tNav('shopping') },
+                { key: 'ledger', label: tNav('ledger') },
+                { key: 'notices', label: tNav('notices') }
+              ].map((tab) => (
+                <button
+                  key={tab.key}
+                  onClick={() => setActiveTab(tab.key as typeof activeTab)}
+                  className={`h-10 px-4 rounded-token text-sm font-medium transition-colors whitespace-nowrap border ${
+                    activeTab === tab.key
+                      ? 'bg-primary text-white border-primary'
+                      : 'bg-surface border-border text-text-secondary hover:bg-surface-elevated'
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
 
-            <Card>
-              <h3 className="font-semibold text-text-primary mb-2">{tNav('shopping')}</h3>
-              <p className="text-sm text-text-secondary mb-4">
-                {tMess('shoppersPerDay')}: {currentMess?.shoppersPerDay}
-              </p>
-              <Button variant="secondary" size="sm" className="w-full">
-                {tCommon('actions')}
-              </Button>
-            </Card>
+            {/* Tab Views */}
+            {activeTab === 'meals' && currentMess && currentMembership && (
+              <MealPreferences
+                messId={currentMess.id}
+                membershipId={currentMembership.id}
+                token={token || undefined}
+              />
+            )}
 
-            <Card>
-              <h3 className="font-semibold text-text-primary mb-2">{tNav('ledger')}</h3>
-              <p className="text-sm text-text-secondary mb-4">
-                {tMess('graceDays')}: {currentMess?.graceDays}
-              </p>
-              <Button variant="secondary" size="sm" className="w-full">
-                {tCommon('actions')}
-              </Button>
-            </Card>
-          </div>
+            {activeTab === 'heatmap' && heatmapData && (
+              <MealHeatmap
+                month={heatmapData.month}
+                daysInMonth={heatmapData.daysInMonth}
+                rows={heatmapData.rows}
+              />
+            )}
+
+            {activeTab === 'shopper' &&
+              (shopperSummary ? (
+                <ShopperSummary
+                  summary={shopperSummary}
+                  token={token || undefined}
+                  isShopperOrManager={isManager}
+                />
+              ) : (
+                <p className="text-sm text-text-secondary">{tCommon('loading')}</p>
+              ))}
+
+            {activeTab === 'ledger' && currentMess && currentMembership && (
+              <LedgerView
+                messId={currentMess.id}
+                membershipId={currentMembership.id}
+                isManager={isManager}
+                token={token || undefined}
+              />
+            )}
+
+            {activeTab === 'notices' && currentMess && (
+              <NoticeBoard
+                messId={currentMess.id}
+                isManager={isManager}
+                token={token || undefined}
+              />
+            )}
+          </>
         )}
 
         {/* Create Mess Modal */}

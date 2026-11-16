@@ -5,6 +5,31 @@ import { UserEntity } from './entities/user.entity';
 import { RefreshTokenEntity } from './entities/refresh-token.entity';
 import { MessEntity } from './entities/mess.entity';
 import { MembershipEntity } from './entities/membership.entity';
+import { MealDefaultEntity } from './entities/meal-default.entity';
+import { MealRuleEntity } from './entities/meal-rule.entity';
+import { MealOverrideEntity } from './entities/meal-override.entity';
+import { MealFinalEntity } from './entities/meal-final.entity';
+import { DailyMenuEntity } from './entities/daily-menu.entity';
+import { LedgerEntryEntity } from './entities/ledger-entry.entity';
+import { MonthlySettingsEntity } from './entities/monthly-settings.entity';
+import { NoticeEntity } from './entities/notice.entity';
+import { AuditLogEntity } from './entities/audit-log.entity';
+
+const ALL_ENTITIES = [
+  UserEntity,
+  RefreshTokenEntity,
+  MessEntity,
+  MembershipEntity,
+  MealDefaultEntity,
+  MealRuleEntity,
+  MealOverrideEntity,
+  MealFinalEntity,
+  DailyMenuEntity,
+  LedgerEntryEntity,
+  MonthlySettingsEntity,
+  NoticeEntity,
+  AuditLogEntity
+];
 
 /**
  * Database module configuring PostgreSQL with TypeORM.
@@ -21,7 +46,7 @@ import { MembershipEntity } from './entities/membership.entity';
             type: 'better-sqlite3' as const,
             database: ':memory:',
             dropSchema: true,
-            entities: [UserEntity, RefreshTokenEntity, MessEntity, MembershipEntity],
+            entities: ALL_ENTITIES,
             synchronize: true,
             logging: false
           };
@@ -33,13 +58,13 @@ import { MembershipEntity } from './entities/membership.entity';
           username: config.get<string>('DB_USER', 'postgres'),
           password: config.get<string>('DB_PASSWORD', 'postgres'),
           database: config.get<string>('DB_NAME', 'mess_meal_manager'),
-          entities: [UserEntity, RefreshTokenEntity, MessEntity, MembershipEntity],
+          entities: ALL_ENTITIES,
           synchronize: false,
           logging: config.get<string>('NODE_ENV') === 'development'
         };
       }
     }),
-    TypeOrmModule.forFeature([UserEntity, RefreshTokenEntity, MessEntity, MembershipEntity])
+    TypeOrmModule.forFeature(ALL_ENTITIES)
   ],
   exports: [TypeOrmModule]
 })
