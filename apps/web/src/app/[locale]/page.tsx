@@ -190,11 +190,24 @@ export default function HomePage() {
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-3">
             <span className="font-bold text-lg text-text-primary">{tCommon('appName')}</span>
-            {currentMess && (
+            {messes && messes.length > 1 ? (
+              <select
+                value={currentMess?.id || ''}
+                onChange={(e) => setActiveMessId(e.target.value)}
+                aria-label={tMess('selectMess')}
+                className="text-xs bg-surface-elevated text-text-primary border border-border px-2.5 py-1 rounded-token focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer"
+              >
+                {messes.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.name}
+                  </option>
+                ))}
+              </select>
+            ) : currentMess ? (
               <span className="text-xs bg-surface-elevated text-text-secondary border border-border px-2.5 py-1 rounded-token">
                 {currentMess.name}
               </span>
-            )}
+            ) : null}
           </div>
           <div className="flex items-center gap-3">
             <LanguageSwitcher />
