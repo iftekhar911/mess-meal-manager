@@ -212,6 +212,9 @@ export default function HomePage() {
             ) : null}
           </div>
           <div className="flex items-center gap-3">
+            <Button variant="secondary" size="sm" onClick={() => setActiveTab('manager')}>
+              {tNav('manager')}
+            </Button>
             <LanguageSwitcher />
             <Avatar
               name={user.name}

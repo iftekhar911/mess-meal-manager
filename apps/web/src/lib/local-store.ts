@@ -612,6 +612,40 @@ export async function handleLocalApiRequest<T>(
     return newMess as unknown as T;
   }
 
+  const messUpdateMatch = path.match(/^\/messes\/([^/]+)$/);
+  if (messUpdateMatch && method === 'PATCH') {
+    const targetMessId = messUpdateMatch[1]!;
+    const targetMess = db.messes.find((m) => m.id === targetMessId);
+    const currentUser = getSessionUser(db) || db.users[0]!;
+    if (targetMess) {
+      const before = { ...targetMess };
+      if (body.name !== undefined) targetMess.name = String(body.name);
+      if (body.cutoffTime !== undefined) targetMess.cutoffTime = String(body.cutoffTime);
+      if (body.mealRate !== undefined) targetMess.mealRate = Number(body.mealRate).toFixed(2);
+      if (body.graceDays !== undefined) targetMess.graceDays = Number(body.graceDays);
+      if (body.warningDays !== undefined) targetMess.warningDays = Number(body.warningDays);
+      if (body.shoppersPerDay !== undefined) {
+        targetMess.shoppersPerDay = Number(body.shoppersPerDay);
+      }
+      if (body.shopTimesPerMonth !== undefined) {
+        targetMess.shopTimesPerMonth = Number(body.shopTimesPerMonth);
+      }
+      db.auditLogs.unshift({
+        id: `aud-${Date.now()}`,
+        messId: targetMess.id,
+        actorId: currentUser.id,
+        action: 'MESS_SETTINGS_UPDATED',
+        entity: 'messes',
+        before: { mealRate: before.mealRate, cutoffTime: before.cutoffTime },
+        after: { mealRate: targetMess.mealRate, cutoffTime: targetMess.cutoffTime },
+        reason: 'Admin updated mess configuration settings',
+        createdAt: new Date().toISOString()
+      });
+      saveDb(db);
+    }
+    return targetMess as unknown as T;
+  }
+
   // Match /messes/:messId/...
   const messMatch = path.match(/^\/messes\/([^/]+)\/(.+)$/);
   if (messMatch) {
@@ -681,13 +715,56 @@ export async function handleLocalApiRequest<T>(
       const targetId = memPatchMatch[1]!;
       const target = db.memberships.find((m) => m.id === targetId);
       if (target) {
+        const before = {
+          role: target.role,
+          isActive: target.isActive,
+          cookBillAmount: target.cookBillAmount
+        };
         if (body.isActive !== undefined) target.isActive = Boolean(body.isActive);
+        if (body.role !== undefined) target.role = body.role as MembershipRole;
         if (body.cookBillAmount !== undefined) {
           target.cookBillAmount = Number(body.cookBillAmount).toFixed(2);
         }
+        db.auditLogs.unshift({
+          id: `aud-${Date.now()}`,
+          messId: mess.id,
+          actorId: currentUser.id,
+          action: 'MEMBER_UPDATED',
+          entity: 'memberships',
+          before,
+          after: {
+            role: target.role,
+            isActive: target.isActive,
+            cookBillAmount: target.cookBillAmount
+          },
+          reason: body.reason ? String(body.reason) : 'Admin updated member settings',
+          createdAt: new Date().toISOString()
+        });
         saveDb(db);
       }
       return target as unknown as T;
+    }
+
+    if (memPatchMatch && method === 'DELETE') {
+      const targetId = memPatchMatch[1]!;
+      const idx = db.memberships.findIndex((m) => m.id === targetId);
+      if (idx >= 0) {
+        const removed = db.memberships[idx]!;
+        db.memberships.splice(idx, 1);
+        db.auditLogs.unshift({
+          id: `aud-${Date.now()}`,
+          messId: mess.id,
+          actorId: currentUser.id,
+          action: 'MEMBER_REMOVED',
+          entity: 'memberships',
+          before: { membershipId: removed.id, userId: removed.userId },
+          after: null,
+          reason: 'Admin removed member from mess',
+          createdAt: new Date().toISOString()
+        });
+        saveDb(db);
+      }
+      return { success: true } as unknown as T;
     }
 
     // MEALS HEATMAP
@@ -843,6 +920,42 @@ export async function handleLocalApiRequest<T>(
       return item as unknown as T;
     }
 
+    if (subPath === 'meals/force-override' && method === 'POST') {
+      const targetMemId = String(body.membershipId || currentMem.id);
+      const date = String(body.date || getDhakaDateString());
+      const slot = (body.slot as SlotType) || SlotType.LUNCH;
+      const idx = db.mealOverrides.findIndex(
+        (o) => o.membershipId === targetMemId && o.date === date && o.slot === slot
+      );
+      const prev = idx >= 0 ? { ...db.mealOverrides[idx] } : null;
+      const item: StoredMealOverride = {
+        membershipId: targetMemId,
+        date,
+        slot,
+        status: Boolean(body.status),
+        eggPreference: (body.eggPreference as EggPreference) || EggPreference.NONE,
+        guestCount: Number(body.guestCount || 0)
+      };
+      if (idx >= 0) {
+        db.mealOverrides[idx] = item;
+      } else {
+        db.mealOverrides.push(item);
+      }
+      db.auditLogs.unshift({
+        id: `aud-${Date.now()}`,
+        messId: mess.id,
+        actorId: currentUser.id,
+        action: 'FORCE_OVERRIDE',
+        entity: 'meal_finals',
+        before: prev,
+        after: { ...item },
+        reason: String(body.reason || 'Admin forced locked meal exception'),
+        createdAt: new Date().toISOString()
+      });
+      saveDb(db);
+      return item as unknown as T;
+    }
+
     // MENUS
     if (subPath === 'menus' && method === 'POST') {
       const date = String(body.date || getDhakaDateString());
@@ -928,6 +1041,24 @@ export async function handleLocalApiRequest<T>(
       return { success: true } as unknown as T;
     }
 
+    if (subPath === 'roster/assign' && method === 'POST') {
+      const targetMemId = String(body.membershipId || currentMem.id);
+      const date = String(body.date || getDhakaDateString());
+      const mem = db.memberships.find((m) => m.id === targetMemId);
+      const usr = mem ? db.users.find((u) => u.id === mem.userId) : undefined;
+      const entry: ShoppingRosterDto = {
+        id: `ros-${Date.now()}`,
+        messId: mess.id,
+        date,
+        membershipId: targetMemId,
+        source: RosterSource.AUTO,
+        member: mem ? { ...mem, user: usr } : undefined
+      };
+      db.roster.push(entry);
+      saveDb(db);
+      return entry as unknown as T;
+    }
+
     // EXPENSES
     if (subPath === 'expenses/shopping' && method === 'GET') {
       const month = searchParams.get('month') || getDhakaDateString().slice(0, 7);
@@ -985,6 +1116,50 @@ export async function handleLocalApiRequest<T>(
         saveDb(db);
       }
       return exp as unknown as T;
+    }
+
+    const rejectMatch = subPath.match(/^expenses\/shopping\/([^/]+)\/reject$/);
+    if (rejectMatch && method === 'POST') {
+      const exp = db.expenses.find((e) => e.id === rejectMatch[1]);
+      if (exp) {
+        exp.status = ExpenseStatus.REJECTED;
+        saveDb(db);
+      }
+      return exp as unknown as T;
+    }
+
+    if (subPath === 'expenses/fuel' && method === 'POST') {
+      const nowIso = new Date().toISOString();
+      const amount = Number(body.amount || 0);
+      const members = db.memberships.filter((m) => m.messId === mess.id && m.isActive);
+      const perMemberFuel = members.length > 0 ? amount / members.length : amount;
+
+      for (const m of members) {
+        db.ledger.unshift({
+          id: `led-${Date.now()}-${m.id}`,
+          membershipId: m.id,
+          type: LedgerType.FUEL,
+          amount: perMemberFuel.toFixed(2),
+          date: String(body.date || getDhakaDateString()),
+          referenceId: null,
+          note: body.note ? String(body.note) : 'Fuel/gas expense share',
+          createdBy: currentUser.id,
+          createdAt: nowIso
+        });
+      }
+      db.auditLogs.unshift({
+        id: `aud-${Date.now()}`,
+        messId: mess.id,
+        actorId: currentUser.id,
+        action: 'FUEL_EXPENSE_RECORDED',
+        entity: 'fuel_expenses',
+        before: null,
+        after: { amount: amount.toFixed(2), note: body.note },
+        reason: body.note ? String(body.note) : 'Admin recorded fuel/gas cylinder expense',
+        createdAt: nowIso
+      });
+      saveDb(db);
+      return { success: true } as unknown as T;
     }
 
     // LEDGER
@@ -1058,6 +1233,38 @@ export async function handleLocalApiRequest<T>(
       return entry as unknown as T;
     }
 
+    if (subPath === 'ledger/adjustment' && method === 'POST') {
+      const nowIso = new Date().toISOString();
+      const targetMemId = String(body.membershipId || currentMem.id);
+      const amountStr = Number(body.amount || 0).toFixed(2);
+      const adjType = (body.type as LedgerType) || LedgerType.ADJUSTMENT;
+      const entry: LedgerEntryDto = {
+        id: `led-${Date.now()}`,
+        membershipId: targetMemId,
+        type: adjType,
+        amount: amountStr,
+        date: String(body.date || getDhakaDateString()),
+        referenceId: null,
+        note: body.reason ? String(body.reason) : 'Admin reversing adjustment',
+        createdBy: currentUser.id,
+        createdAt: nowIso
+      };
+      db.ledger.unshift(entry);
+      db.auditLogs.unshift({
+        id: `aud-${Date.now()}`,
+        messId: mess.id,
+        actorId: currentUser.id,
+        action: 'LEDGER_ADJUSTMENT',
+        entity: 'ledger_entries',
+        before: null,
+        after: { membershipId: targetMemId, type: adjType, amount: amountStr },
+        reason: String(body.reason || 'Admin ledger adjustment'),
+        createdAt: nowIso
+      });
+      saveDb(db);
+      return entry as unknown as T;
+    }
+
     // NOTICES
     if (subPath === 'notices' && method === 'GET') {
       return db.notices.filter((n) => n.messId === mess.id) as unknown as T;
@@ -1076,6 +1283,16 @@ export async function handleLocalApiRequest<T>(
       db.notices.unshift(notice);
       saveDb(db);
       return notice as unknown as T;
+    }
+
+    const noticeDelMatch = subPath.match(/^notices\/([^/]+)$/);
+    if (noticeDelMatch && method === 'DELETE') {
+      const idx = db.notices.findIndex((n) => n.id === noticeDelMatch[1]);
+      if (idx >= 0) {
+        db.notices.splice(idx, 1);
+        saveDb(db);
+      }
+      return { success: true } as unknown as T;
     }
 
     // REPORTS
