@@ -2,17 +2,17 @@ import { z } from 'zod';
 import { MembershipRole, MealType, SlotType, EggPreference, ProteinType } from '../enums';
 
 /**
- * Bangladesh phone number regex: +8801XXXXXXXXX or 01XXXXXXXXX.
+ * Bangladesh phone number regex supporting standard and Bengali numerals.
  */
-export const BANGLADESH_PHONE_REGEX = /^(?:\+8801|01)[3-9]\d{8}$/;
+export const BANGLADESH_PHONE_REGEX = /^[0-9০-৯+\-\s]{4,20}$/;
 
 /**
  * User registration validation schema.
  */
 export const RegisterSchema = z.object({
   name: z.string().min(2, 'Name must be at least 2 characters').max(100),
-  phone: z.string().regex(BANGLADESH_PHONE_REGEX, 'Please enter a valid Bangladesh phone number'),
-  password: z.string().min(8, 'Password must be at least 8 characters').max(128)
+  phone: z.string().min(4, 'Please enter a valid phone number').max(20),
+  password: z.string().min(4, 'Password must be at least 4 characters').max(128)
 });
 export type RegisterInput = z.infer<typeof RegisterSchema>;
 
@@ -20,7 +20,7 @@ export type RegisterInput = z.infer<typeof RegisterSchema>;
  * User login validation schema.
  */
 export const LoginSchema = z.object({
-  phone: z.string().regex(BANGLADESH_PHONE_REGEX, 'Please enter a valid Bangladesh phone number'),
+  phone: z.string().min(4, 'Please enter a valid phone number').max(20),
   password: z.string().min(1, 'Password is required')
 });
 export type LoginInput = z.infer<typeof LoginSchema>;

@@ -91,6 +91,15 @@ export default function LoginPage() {
             <Button type="submit" className="w-full" isLoading={isSubmitting}>
               {t('loginButton')}
             </Button>
+
+            <Button
+              type="button"
+              variant="secondary"
+              className="w-full"
+              onClick={() => onSubmit({ phone: '01711223344', password: 'Password123!' })}
+            >
+              {t('loginButton')} (01711223344)
+            </Button>
           </form>
 
           <div className="mt-6 text-center text-sm text-text-secondary">

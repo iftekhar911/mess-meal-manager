@@ -1,6 +1,7 @@
 import { ApiErrorResponse } from '@mess/shared';
+import { handleLocalApiRequest } from './local-store';
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api/v1';
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL;
 
 export class ApiClientError extends Error {
   constructor(
@@ -15,7 +16,8 @@ export class ApiClientError extends Error {
 }
 
 /**
- * Universal API fetch wrapper with token injection and standard error parsing.
+ * Universal API fetch wrapper with token injection, standard error parsing,
+ * and automatic browser persistence fallback when running standalone on Vercel.
  */
 export async function apiFetch<T>(
   endpoint: string,
@@ -23,7 +25,13 @@ export async function apiFetch<T>(
   token?: string,
   messId?: string
 ): Promise<T> {
-  const url = `${API_BASE_URL}${endpoint.startsWith('/') ? endpoint : `/${endpoint}`}`;
+  const normalizedEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
+
+  if (!API_BASE_URL) {
+    return handleLocalApiRequest<T>(normalizedEndpoint, options);
+  }
+
+  const url = `${API_BASE_URL}${normalizedEndpoint}`;
 
   const headers = new Headers(options.headers || {});
   headers.set('Content-Type', 'application/json');
@@ -36,34 +44,40 @@ export async function apiFetch<T>(
     headers.set('x-mess-id', messId);
   }
 
-  const response = await fetch(url, {
-    ...options,
-    headers,
-    credentials: 'include'
-  });
+  try {
+    const response = await fetch(url, {
+      ...options,
+      headers,
+      credentials: 'include'
+    });
 
-  if (!response.ok) {
-    let errorData: ApiErrorResponse;
-    try {
-      errorData = await response.json();
-    } catch {
-      errorData = {
-        statusCode: response.status,
-        errorCode: 'FETCH_ERROR',
-        message: response.statusText || 'Network request failed',
-        timestamp: new Date().toISOString(),
-        path: endpoint
-      };
+    if (!response.ok) {
+      let errorData: ApiErrorResponse;
+      try {
+        errorData = await response.json();
+      } catch {
+        errorData = {
+          statusCode: response.status,
+          errorCode: 'FETCH_ERROR',
+          message: response.statusText || 'Network request failed',
+          timestamp: new Date().toISOString(),
+          path: endpoint
+        };
+      }
+      throw new ApiClientError(
+        errorData.statusCode,
+        errorData.errorCode,
+        errorData.message,
+        errorData.details
+      );
     }
-    throw new ApiClientError(
-      errorData.statusCode,
-      errorData.errorCode,
-      errorData.message,
-      errorData.details
-    );
-  }
 
-  const json = await response.json();
-  // Unwrap standard response data payload if present
-  return json.data !== undefined ? json.data : json;
+    const json = await response.json();
+    return json.data !== undefined ? json.data : json;
+  } catch (err: unknown) {
+    if (err instanceof ApiClientError) {
+      throw err;
+    }
+    return handleLocalApiRequest<T>(normalizedEndpoint, options);
+  }
 }
