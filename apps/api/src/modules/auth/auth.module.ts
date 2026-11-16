@@ -1,0 +1,27 @@
+import { Module } from '@nestjs/common';
+import { TypeOrmModule } from '@nestjs/typeorm';
+import { JwtModule } from '@nestjs/jwt';
+import { PassportModule } from '@nestjs/passport';
+import { ConfigModule } from '@nestjs/config';
+import { AuthService } from './auth.service';
+import { AuthController } from './auth.controller';
+import { JwtStrategy } from './jwt.strategy';
+import { UserEntity } from '../../database/entities/user.entity';
+import { RefreshTokenEntity } from '../../database/entities/refresh-token.entity';
+import { MembershipEntity } from '../../database/entities/membership.entity';
+
+/**
+ * Authentication module managing JWT issuance, password hashing, and token rotation.
+ */
+@Module({
+  imports: [
+    TypeOrmModule.forFeature([UserEntity, RefreshTokenEntity, MembershipEntity]),
+    PassportModule.register({ defaultStrategy: 'jwt' }),
+    JwtModule.register({}),
+    ConfigModule
+  ],
+  controllers: [AuthController],
+  providers: [AuthService, JwtStrategy],
+  exports: [AuthService, JwtStrategy, PassportModule]
+})
+export class AuthModule {}

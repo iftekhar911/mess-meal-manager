@@ -1,0 +1,111 @@
+{
+  "common": {
+    "appName": "মেস মিল ম্যানেজার",
+    "loading": "লোড হচ্ছে...",
+    "save": "সংরক্ষণ করুন",
+    "cancel": "বাতিল",
+    "confirm": "নিশ্চিত করুন",
+    "delete": "মুছে ফেলুন",
+    "edit": "সম্পাদনা",
+    "back": "ফিরে যান",
+    "language": "ভাষা",
+    "logout": "লগআউট",
+    "bdt": "টাকা",
+    "status": "অবস্থা",
+    "actions": "পদক্ষেপ",
+    "success": "সফল হয়েছে",
+    "error": "সমস্যা দেখা দিয়েছে"
+  },
+  "nav": {
+    "dashboard": "ড্যাশবোর্ড",
+    "meals": "মিল হিসাব",
+    "heatmap": "মিল ছক",
+    "shopping": "বাজার তালিকা",
+    "ledger": "টাকার খাতা",
+    "notices": "বিজ্ঞপ্তি",
+    "manager": "ম্যানেজার প্যানেল"
+  },
+  "auth": {
+    "loginTitle": "অ্যাকাউন্টে প্রবেশ করুন",
+    "loginSubtitle": "আপনার ফোন নম্বর ও পাসওয়ার্ড দিয়ে লগইন করুন",
+    "registerTitle": "নতুন অ্যাকাউন্ট তৈরি করুন",
+    "registerSubtitle": "মেস ব্যবস্থাপনার জন্য আপনার তথ্য দিন",
+    "phoneLabel": "ফোন নম্বর",
+    "phonePlaceholder": "০১৭১১২২৩৩৪৪",
+    "passwordLabel": "পাসওয়ার্ড",
+    "passwordPlaceholder": "কমপক্ষে ৮ অক্ষরের পাসওয়ার্ড",
+    "nameLabel": "আপনার নাম",
+    "namePlaceholder": "যেমন: তানভীর আহমেদ",
+    "loginButton": "লগইন করুন",
+    "registerButton": "অ্যাকাউন্ট খুলুন",
+    "noAccount": "অ্যাকাউন্ট নেই? নতুন অ্যাকাউন্ট খুলুন",
+    "hasAccount": "ইতিমধ্যে অ্যাকাউন্ট আছে? লগইন করুন"
+  },
+  "messes": {
+    "selectMess": "মেস নির্বাচন করুন",
+    "createMess": "নতুন মেস তৈরি করুন",
+    "messName": "মেসের নাম",
+    "cutoffTime": "কাটঅফ সময়",
+    "mealRate": "আনুমানিক মিল রেট",
+    "graceDays": "গ্রেস দিন সংখ্যা",
+    "warningDays": "সতর্কতা দিন সংখ্যা",
+    "shoppersPerDay": "প্রতিদিনের বাজারকারী",
+    "shopTimesPerMonth": "মাসে বাজার করার সংখ্যা",
+    "createButton": "মেস শুরু করুন"
+  },
+  "members": {
+    "title": "মেসের সদস্যবৃন্দ",
+    "addBoarder": "নতুন সদস্য যুক্ত করুন",
+    "role": "ভূমিকা",
+    "manager": "ম্যানেজার",
+    "boarder": "বর্ডার",
+    "cookBill": "খালা বিল",
+    "statusActive": "সক্রিয়",
+    "statusInactive": "নিষ্ক্রিয়"
+  },
+  "meals": {
+    "title": "মিল ব্যবস্থাপনা",
+    "lunch": "দুপুর",
+    "dinner": "রাত",
+    "fullMeal": "ফুল মিল (দুপুর ও রাত)",
+    "halfMeal": "হাফ মিল",
+    "eggPreference": "ডিম পছন্দ",
+    "eggNone": "কোনটি নয়",
+    "eggInsteadOfFish": "মাছের বদলে ডিম",
+    "eggInsteadOfChicken": "মুরগির বদলে ডিম",
+    "guestCount": "মেহমান মিল সংখ্যা",
+    "continuousToggle": "মিল চালু বা বন্ধ রাখুন",
+    "lockNotice": "কাটঅফ সময়ের পর মিল পরিবর্তন ম্যানেজার ব্যতীত সম্ভব নয়"
+  },
+  "shopper": {
+    "summaryTitle": "আজকের বাজার সারাংশ",
+    "todayMenu": "আজকের মেন্যু",
+    "menuPlaceholder": "যেমন: রুই মাছ ও সবজি",
+    "protein": "প্রধান খাবার",
+    "proteinFish": "মাছ",
+    "proteinChicken": "মুরগি",
+    "proteinOther": "অন্যান্য",
+    "totalMeals": "মোট মিল",
+    "lunchCount": "দুপুরের মিল",
+    "dinnerCount": "রাতের মিল",
+    "eggTotal": "মোট ডিম চাহিদা",
+    "guestTotal": "মেহমান মিল",
+    "budgetRequired": "প্রয়োজনীয় আনুমানিক টাকা"
+  },
+  "ledger": {
+    "title": "হিসাবের খাতা",
+    "deposit": "জমা",
+    "balance": "বর্তমান ব্যালেন্স",
+    "daysLeft": "দিনের ব্যালেন্স অবশিষ্ট",
+    "recordDeposit": "টাকা জমা রেকর্ড করুন",
+    "depositAmount": "জমার পরিমাণ",
+    "reversalNotice": "ভুল সংশোধনে কেবল রিভার্সিং এন্ট্রি করা হয়"
+  },
+  "errors": {
+    "networkError": "সার্ভারের সাথে সংযোগ স্থাপন করা যায়নি",
+    "unauthorized": "অনুমোদন নেই, অনুগ্রহ করে পুনরায় লগইন করুন",
+    "forbidden": "এই কাজের অনুমতি আপনার নেই",
+    "notFound": "তথ্য খুঁজে পাওয়া যায়নি",
+    "validationFailed": "প্রদত্ত তথ্য সঠিক নয়"
+  }
+}
