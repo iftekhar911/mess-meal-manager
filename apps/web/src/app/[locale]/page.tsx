@@ -32,6 +32,8 @@ import { RosterCalendar } from '@/components/features/roster/roster-calendar';
 import { ShoppingExpenses } from '@/components/features/expenses/shopping-expenses';
 import { MonthStatementView } from '@/components/features/reports/month-statement-view';
 import { AuditLogViewer } from '@/components/features/audit/audit-log-viewer';
+import { ManagerPanel } from '@/components/features/manager/manager-panel';
+import { Tabs } from '@/components/ui/tabs';
 import { useRouter } from '@/i18n/routing';
 
 export default function HomePage() {
@@ -51,7 +53,7 @@ export default function HomePage() {
   const queryClient = useQueryClient();
 
   const [activeTab, setActiveTab] = useState<
-    'meals' | 'heatmap' | 'shopper' | 'ledger' | 'reports' | 'notices' | 'audit'
+    'meals' | 'heatmap' | 'shopper' | 'ledger' | 'reports' | 'notices' | 'audit' | 'manager'
   >('meals');
   const [isCreateMessOpen, setIsCreateMessOpen] = useState(false);
 
@@ -249,29 +251,20 @@ export default function HomePage() {
         ) : (
           <>
             {/* Feature Navigation Tabs */}
-            <div className="flex items-center gap-2 overflow-x-auto pb-1 border-b border-border">
-              {[
+            <Tabs
+              activeKey={activeTab}
+              onChange={(key) => setActiveTab(key as typeof activeTab)}
+              items={[
                 { key: 'meals', label: tNav('meals') },
                 { key: 'heatmap', label: tNav('heatmap') },
                 { key: 'shopper', label: tNav('shopping') },
                 { key: 'ledger', label: tNav('ledger') },
                 { key: 'reports', label: tNav('reports') },
                 { key: 'notices', label: tNav('notices') },
-                { key: 'audit', label: tNav('audit') }
-              ].map((tab) => (
-                <button
-                  key={tab.key}
-                  onClick={() => setActiveTab(tab.key as typeof activeTab)}
-                  className={`h-10 px-4 rounded-token text-sm font-medium transition-colors whitespace-nowrap border ${
-                    activeTab === tab.key
-                      ? 'bg-primary text-white border-primary'
-                      : 'bg-surface border-border text-text-secondary hover:bg-surface-elevated'
-                  }`}
-                >
-                  {tab.label}
-                </button>
-              ))}
-            </div>
+                { key: 'audit', label: tNav('audit') },
+                { key: 'manager', label: tNav('manager') }
+              ]}
+            />
 
             {/* Tab Views */}
             {activeTab === 'meals' && currentMess && currentMembership && (
@@ -343,6 +336,14 @@ export default function HomePage() {
 
             {activeTab === 'audit' && currentMess && (
               <AuditLogViewer messId={currentMess.id} token={token || undefined} />
+            )}
+
+            {activeTab === 'manager' && currentMess && (
+              <ManagerPanel
+                messId={currentMess.id}
+                isManager={isManager}
+                token={token || undefined}
+              />
             )}
           </>
         )}

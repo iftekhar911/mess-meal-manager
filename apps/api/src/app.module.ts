@@ -18,6 +18,8 @@ import { SchedulerModule } from './modules/scheduler/scheduler.module';
 import { RosterModule } from './modules/roster/roster.module';
 import { ExpensesModule } from './modules/expenses/expenses.module';
 import { ReportsModule } from './modules/reports/reports.module';
+import { NotificationsModule } from './modules/notifications/notifications.module';
+import { BillingModule } from './modules/billing/billing.module';
 
 @Module({
   imports: [
@@ -46,7 +48,9 @@ import { ReportsModule } from './modules/reports/reports.module';
     SchedulerModule,
     RosterModule,
     ExpensesModule,
-    ReportsModule
+    ReportsModule,
+    NotificationsModule,
+    BillingModule
   ]
 })
 export class AppModule {}
