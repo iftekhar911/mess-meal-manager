@@ -250,6 +250,62 @@ export interface AuditLogDto {
 }
 
 /**
+ * Closed month accounting statement and record.
+ */
+export interface MonthCloseDto {
+  id: string;
+  messId: string;
+  month: string;
+  closedById: string;
+  totalMeals: string;
+  totalMarketCost: string;
+  actualMealRate: string;
+  estimatedMealRate: string;
+  totalFuelCost: string;
+  estimatedFuelCost: string;
+  fuelDiffReconciliation: string;
+  totalCookBill: string;
+  isLocked: boolean;
+  closedAt: string;
+  createdAt: string;
+}
+
+/**
+ * Member summary row in the monthly financial close statement.
+ */
+export interface MemberMonthSummaryDto {
+  membershipId: string;
+  userName: string;
+  userPhone: string;
+  totalMeals: number;
+  mealCost: string;
+  fuelCost: string;
+  cookBill: string;
+  otherDebits: string;
+  totalDebits: string;
+  totalDeposits: string;
+  finalBalance: string;
+  status: BalanceStatus;
+}
+
+/**
+ * Complete monthly financial close statement.
+ */
+export interface MonthStatementDto {
+  month: string;
+  messName: string;
+  isClosed: boolean;
+  closedAt?: string;
+  actualMealRate: string;
+  estimatedMealRate: string;
+  totalMeals: number;
+  totalMarketCost: string;
+  totalFuelCost: string;
+  totalDeposits: string;
+  members: MemberMonthSummaryDto[];
+}
+
+/**
  * Standard API error structure.
  */
 export interface ApiErrorResponse {

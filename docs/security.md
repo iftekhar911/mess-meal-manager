@@ -32,3 +32,9 @@ Mess Meal Manager enforces security by design across API and client layers.
 
 - Mutating manager actions, meal locks, and deposit entries generate immutable records in the `audit_logs` table.
 - Financial corrections are strictly append-only reversal entries; direct deletion or in-place modification of ledger rows is prohibited.
+
+## 6. Month-End Sealing and Immutability
+
+- Month close records in `month_closes` table lock the accounting period permanently (`is_locked: true`).
+- Any attempt to modify meal finals, roster votes, or financial entries within a sealed month is rejected.
+- All post-lock financial adjustments require new append-only ledger entries in the subsequent open accounting period.

@@ -31,3 +31,9 @@ This document records architectural, money, and privacy decisions for Mess Meal 
 - Context: Mess members need operational transparency without violating personal privacy.
 - Decision: Daily meal totals, heatmap slot statuses (green/gray/red), menus, notices, and market expense totals are visible to all mess members. Individual deposit amounts, personal balances, and avatar ring colors remain private to the boarder and the manager until month close. Upon month close, all deposits and expense items become public to all members for collective audit.
 - Consequences: Balances dignity during the month while guaranteeing total transparency at month close.
+
+## ADR 006: Month-End Financial Reconciliation, Reversible Adjustments, and Manager Audit Trails
+
+- Context: At the end of each month, the estimated meal rate must be replaced by the actual meal rate (total approved market expenses divided by total finalized active meal slots), and any fuel budget deficit must be settled fairly across boarders.
+- Decision: The month close process calculates the actual meal rate and computes the fuel difference between actual fuel costs and estimated fuel collected. If actual fuel exceeds estimated fuel, the deficit is distributed in proportion to active meal slots eaten via append-only adjustment entries (`ADJUSTMENT`). The month is then locked in `month_closes` table to prevent retrospective tampering. All manager overrides and exceptions are published in the manager liability audit report.
+- Consequences: Boarders pay exactly what was spent in proportion to their meals, with an immutable audit trail and complete collective financial transparency.

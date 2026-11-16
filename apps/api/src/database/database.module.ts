@@ -19,6 +19,7 @@ import { SwapRequestEntity } from './entities/swap-request.entity';
 import { ShoppingExpenseEntity } from './entities/shopping-expense.entity';
 import { ExpenseItemEntity } from './entities/expense-item.entity';
 import { FuelExpenseEntity } from './entities/fuel-expense.entity';
+import { MonthCloseEntity } from './entities/month-close.entity';
 
 const ALL_ENTITIES = [
   UserEntity,
@@ -38,7 +39,8 @@ const ALL_ENTITIES = [
   SwapRequestEntity,
   ShoppingExpenseEntity,
   ExpenseItemEntity,
-  FuelExpenseEntity
+  FuelExpenseEntity,
+  MonthCloseEntity
 ];
 
 /**

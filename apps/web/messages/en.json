@@ -23,6 +23,8 @@
     "shopping": "Shopping",
     "ledger": "Ledger",
     "notices": "Notices",
+    "reports": "Monthly Close",
+    "audit": "Audit Log",
     "manager": "Manager Panel"
   },
   "auth": {
@@ -100,6 +102,30 @@
     "recordDeposit": "Record Deposit",
     "depositAmount": "Deposit Amount",
     "reversalNotice": "Corrections are recorded strictly as reversing entries"
+  },
+  "reports": {
+    "title": "Monthly Reports",
+    "statementTitle": "Monthly Final Financial Statement",
+    "actualMealRate": "Actual Meal Rate",
+    "estimatedMealRate": "Estimated Meal Rate",
+    "totalMeals": "Total Meals",
+    "totalMarketCost": "Total Market Expenses",
+    "totalFuelCost": "Total Fuel Expenses",
+    "totalDeposits": "Total Deposits",
+    "closeMonth": "Close and Lock Month",
+    "monthClosed": "This month is closed and locked",
+    "exportPdf": "Print Statement",
+    "fuelDeficit": "Actual Fuel Cost",
+    "managerLiability": "Manager Liability Audit"
+  },
+  "audit": {
+    "title": "Audit Trail",
+    "subtitle": "Detailed record of all manager exceptions and overrides",
+    "action": "Action",
+    "actor": "Actor",
+    "reason": "Mandatory Reason",
+    "time": "Timestamp",
+    "noLogs": "No audit records found"
   },
   "errors": {
     "networkError": "Could not connect to the server",

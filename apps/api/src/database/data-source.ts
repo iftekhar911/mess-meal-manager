@@ -18,6 +18,7 @@ import { SwapRequestEntity } from './entities/swap-request.entity';
 import { ShoppingExpenseEntity } from './entities/shopping-expense.entity';
 import { ExpenseItemEntity } from './entities/expense-item.entity';
 import { FuelExpenseEntity } from './entities/fuel-expense.entity';
+import { MonthCloseEntity } from './entities/month-close.entity';
 
 export const AppDataSource = new DataSource({
   type: 'postgres',
@@ -46,7 +47,8 @@ export const AppDataSource = new DataSource({
     SwapRequestEntity,
     ShoppingExpenseEntity,
     ExpenseItemEntity,
-    FuelExpenseEntity
+    FuelExpenseEntity,
+    MonthCloseEntity
   ],
   migrations: [__dirname + '/migrations/*{.ts,.js}']
 });

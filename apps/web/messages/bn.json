@@ -23,6 +23,8 @@
     "shopping": "বাজার তালিকা",
     "ledger": "টাকার খাতা",
     "notices": "বিজ্ঞপ্তি",
+    "reports": "মাসিক হিসাব",
+    "audit": "অডিট লগ",
     "manager": "ম্যানেজার প্যানেল"
   },
   "auth": {
@@ -100,6 +102,30 @@
     "recordDeposit": "টাকা জমা রেকর্ড করুন",
     "depositAmount": "জমার পরিমাণ",
     "reversalNotice": "ভুল সংশোধনে কেবল রিভার্সিং এন্ট্রি করা হয়"
+  },
+  "reports": {
+    "title": "মাসিক হিসাব বিবরণী",
+    "statementTitle": "মাসিক চূড়ান্ত আর্থিক বিবরণী",
+    "actualMealRate": "প্রকৃত মিল রেট",
+    "estimatedMealRate": "আনুমানিক মিল রেট",
+    "totalMeals": "মোট মিল",
+    "totalMarketCost": "মোট বাজার খরচ",
+    "totalFuelCost": "মোট গ্যাস/জ্বালানি খরচ",
+    "totalDeposits": "মোট জমা",
+    "closeMonth": "মাসিক হিসাব সমাপ্ত করুন",
+    "monthClosed": "এই মাসের হিসাব সমাপ্ত ও সিল করা হয়েছে",
+    "exportPdf": "প্রিন্ট করুন",
+    "fuelDeficit": "প্রকৃত গ্যাস খরচ",
+    "managerLiability": "ম্যানেজার দায়বদ্ধতা অডিট"
+  },
+  "audit": {
+    "title": "অডিট ট্রেইল",
+    "subtitle": "ম্যানেজার কর্তৃক পরিবর্তিত সকল বিষয়ের বিস্তারিত রেকর্ড",
+    "action": "পদক্ষেপ",
+    "actor": "কার্যকারী",
+    "reason": "কারণ",
+    "time": "সময়",
+    "noLogs": "কোন অডিট রেকর্ড পাওয়া যায়নি"
   },
   "errors": {
     "networkError": "সার্ভারের সাথে সংযোগ স্থাপন করা যায়নি",

@@ -30,6 +30,8 @@ import { LedgerView } from '@/components/features/ledger/ledger-view';
 import { NoticeBoard } from '@/components/features/notices/notice-board';
 import { RosterCalendar } from '@/components/features/roster/roster-calendar';
 import { ShoppingExpenses } from '@/components/features/expenses/shopping-expenses';
+import { MonthStatementView } from '@/components/features/reports/month-statement-view';
+import { AuditLogViewer } from '@/components/features/audit/audit-log-viewer';
 import { useRouter } from '@/i18n/routing';
 
 export default function HomePage() {
@@ -49,7 +51,7 @@ export default function HomePage() {
   const queryClient = useQueryClient();
 
   const [activeTab, setActiveTab] = useState<
-    'meals' | 'heatmap' | 'shopper' | 'ledger' | 'notices'
+    'meals' | 'heatmap' | 'shopper' | 'ledger' | 'reports' | 'notices' | 'audit'
   >('meals');
   const [isCreateMessOpen, setIsCreateMessOpen] = useState(false);
 
@@ -240,7 +242,9 @@ export default function HomePage() {
                 { key: 'heatmap', label: tNav('heatmap') },
                 { key: 'shopper', label: tNav('shopping') },
                 { key: 'ledger', label: tNav('ledger') },
-                { key: 'notices', label: tNav('notices') }
+                { key: 'reports', label: tNav('reports') },
+                { key: 'notices', label: tNav('notices') },
+                { key: 'audit', label: tNav('audit') }
               ].map((tab) => (
                 <button
                   key={tab.key}
@@ -308,12 +312,24 @@ export default function HomePage() {
               />
             )}
 
+            {activeTab === 'reports' && currentMess && (
+              <MonthStatementView
+                messId={currentMess.id}
+                isManager={isManager}
+                token={token || undefined}
+              />
+            )}
+
             {activeTab === 'notices' && currentMess && (
               <NoticeBoard
                 messId={currentMess.id}
                 isManager={isManager}
                 token={token || undefined}
               />
+            )}
+
+            {activeTab === 'audit' && currentMess && (
+              <AuditLogViewer messId={currentMess.id} token={token || undefined} />
             )}
           </>
         )}
