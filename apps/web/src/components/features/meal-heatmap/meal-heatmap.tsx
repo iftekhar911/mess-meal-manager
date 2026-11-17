@@ -52,16 +52,20 @@ export const MealHeatmap: React.FC<MealHeatmapProps> = ({ month, daysInMonth, ro
   // Calculate day column totals
   const dayTotals = daysArray.map((d) => {
     let dayTotal = 0;
-    for (const row of rows) {
-      const cell = row.days[d.dateStr];
-      if (cell?.lunch) dayTotal += 0.5;
-      if (cell?.dinner) dayTotal += 0.5;
+    if (Array.isArray(rows)) {
+      for (const row of rows) {
+        const cell = row?.days?.[d.dateStr];
+        if (cell?.lunch) dayTotal += 0.5;
+        if (cell?.dinner) dayTotal += 0.5;
+      }
     }
     return dayTotal;
   });
 
   // Calculate overall grand total
-  const grandTotal = rows.reduce((acc, row) => acc + row.totalMeals, 0);
+  const grandTotal = Array.isArray(rows)
+    ? rows.reduce((acc, row) => acc + (row?.totalMeals || 0), 0)
+    : 0;
 
   return (
     <div className="w-full space-y-3">
@@ -110,61 +114,73 @@ export const MealHeatmap: React.FC<MealHeatmapProps> = ({ month, daysInMonth, ro
               </tr>
             </thead>
             <tbody>
-              {rows.map((row) => (
-                <tr
-                  key={row.member.id}
-                  className="border-b border-border hover:bg-surface-elevated/40 transition-colors"
-                >
-                  <td className="sticky left-0 z-10 bg-surface px-4 py-2.5 font-medium text-text-primary border-r border-border whitespace-nowrap shadow-xs">
-                    <span className="block font-semibold">{row.member.name}</span>
-                    <span className="text-2xs text-text-muted">{row.member.role}</span>
-                  </td>
-                  {daysArray.map((d) => {
-                    const cell = row.days[d.dateStr] || {
-                      lunch: false,
-                      dinner: false,
-                      isAutoOff: false
-                    };
-
-                    return (
-                      <td
-                        key={d.dateStr}
-                        className="p-1 border-r border-border text-center align-middle"
-                      >
-                        <div className="w-8 h-8 mx-auto flex flex-col rounded-md overflow-hidden border border-border shadow-2xs">
-                          {/* Top half: Lunch */}
-                          <div
-                            className={clsx(
-                              'h-4 w-full transition-colors',
-                              cell.isAutoOff
-                                ? 'bg-danger'
-                                : cell.lunch
-                                  ? 'bg-success'
-                                  : 'bg-surface-elevated'
-                            )}
-                            title={`${row.member.name}: ${d.dateStr} ${t('lunch')} (${cell.lunch ? t('on') : t('off')})`}
-                          />
-                          {/* Bottom half: Dinner */}
-                          <div
-                            className={clsx(
-                              'h-4 w-full border-t border-border/40 transition-colors',
-                              cell.isAutoOff
-                                ? 'bg-danger'
-                                : cell.dinner
-                                  ? 'bg-success'
-                                  : 'bg-surface-elevated'
-                            )}
-                            title={`${row.member.name}: ${d.dateStr} ${t('dinner')} (${cell.dinner ? t('on') : t('off')})`}
-                          />
-                        </div>
+              {Array.isArray(rows) &&
+                rows.map((row, idx) => {
+                  const memberId =
+                    row?.member?.id ||
+                    (row as unknown as { membershipId?: string })?.membershipId ||
+                    `row-${idx}`;
+                  const memberName =
+                    row?.member?.name ||
+                    (row as unknown as { userName?: string })?.userName ||
+                    'Member';
+                  const memberRole = row?.member?.role || 'BOARDER';
+                  return (
+                    <tr
+                      key={memberId}
+                      className="border-b border-border hover:bg-surface-elevated/40 transition-colors"
+                    >
+                      <td className="sticky left-0 z-10 bg-surface px-4 py-2.5 font-medium text-text-primary border-r border-border whitespace-nowrap shadow-xs">
+                        <span className="block font-semibold">{memberName}</span>
+                        <span className="text-2xs text-text-muted">{memberRole}</span>
                       </td>
-                    );
-                  })}
-                  <td className="sticky right-0 z-10 bg-surface px-3 py-2 text-center font-bold text-text-primary border-l border-border shadow-xs">
-                    {formatDigit(row.totalMeals)}
-                  </td>
-                </tr>
-              ))}
+                      {daysArray.map((d) => {
+                        const cell = row?.days?.[d.dateStr] || {
+                          lunch: false,
+                          dinner: false,
+                          isAutoOff: false
+                        };
+
+                        return (
+                          <td
+                            key={d.dateStr}
+                            className="p-1 border-r border-border text-center align-middle"
+                          >
+                            <div className="w-8 h-8 mx-auto flex flex-col rounded-md overflow-hidden border border-border shadow-2xs">
+                              {/* Top half: Lunch */}
+                              <div
+                                className={clsx(
+                                  'h-4 w-full transition-colors',
+                                  cell.isAutoOff
+                                    ? 'bg-danger'
+                                    : cell.lunch
+                                      ? 'bg-success'
+                                      : 'bg-surface-elevated'
+                                )}
+                                title={`${memberName}: ${d.dateStr} ${t('lunch')} (${cell.lunch ? t('on') : t('off')})`}
+                              />
+                              {/* Bottom half: Dinner */}
+                              <div
+                                className={clsx(
+                                  'h-4 w-full border-t border-border/40 transition-colors',
+                                  cell.isAutoOff
+                                    ? 'bg-danger'
+                                    : cell.dinner
+                                      ? 'bg-success'
+                                      : 'bg-surface-elevated'
+                                )}
+                                title={`${memberName}: ${d.dateStr} ${t('dinner')} (${cell.dinner ? t('on') : t('off')})`}
+                              />
+                            </div>
+                          </td>
+                        );
+                      })}
+                      <td className="sticky right-0 z-10 bg-surface px-3 py-2 text-center font-bold text-text-primary border-l border-border shadow-xs">
+                        {formatDigit(row?.totalMeals || 0)}
+                      </td>
+                    </tr>
+                  );
+                })}
             </tbody>
             <tfoot>
               <tr className="bg-surface-elevated font-bold text-text-primary border-t border-border">

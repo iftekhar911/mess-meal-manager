@@ -773,7 +773,7 @@ export async function handleLocalApiRequest<T>(
 
       const rows = members.map((m) => {
         const user = db.users.find((u) => u.id === m.userId) || m.user;
-        const cells = [];
+        const days: Record<string, { lunch: boolean; dinner: boolean; isAutoOff: boolean }> = {};
         let totalMeals = 0;
 
         for (let d = 1; d <= daysInMonth; d++) {
@@ -782,28 +782,25 @@ export async function handleLocalApiRequest<T>(
           const dinner = resolveSlotStatus(db, m.id, dateStr, SlotType.DINNER);
 
           if (lunch.status) totalMeals += 0.5 + lunch.guestCount * 0.5;
-          if (dinner.status) totalMeals += 0.5 + dinner.guestCount * 0.5;
+          if (dinner) totalMeals += 0.5 + dinner.guestCount * 0.5;
 
-          cells.push({
-            date: dateStr,
-            lunch: {
-              status: lunch.status,
-              isAutoOff: lunch.isAutoOff,
-              guestCount: lunch.guestCount
-            },
-            dinner: {
-              status: dinner.status,
-              isAutoOff: dinner.isAutoOff,
-              guestCount: dinner.guestCount
-            }
-          });
+          days[dateStr] = {
+            lunch: lunch.status,
+            dinner: dinner.status,
+            isAutoOff: lunch.isAutoOff || dinner.isAutoOff
+          };
         }
 
         return {
+          member: {
+            id: m.id,
+            name: user?.name || 'Member',
+            role: m.role
+          },
           membershipId: m.id,
           userName: user?.name || 'Member',
           avatarUrl: user?.avatarUrl || null,
-          cells,
+          days,
           totalMeals
         };
       });

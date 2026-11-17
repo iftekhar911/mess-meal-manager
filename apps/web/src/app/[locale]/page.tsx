@@ -232,7 +232,11 @@ export default function HomePage() {
   }
 
   // Today's meal row for current user in heatmap
-  const userHeatmapRow = heatmapData?.rows?.find((r) => r.member.id === currentMembership?.id);
+  const userHeatmapRow = heatmapData?.rows?.find(
+    (r) =>
+      (r?.member?.id || (r as unknown as { membershipId?: string })?.membershipId) ===
+      currentMembership?.id
+  );
   const todayCell = userHeatmapRow?.days?.[todayStr];
 
   return (
