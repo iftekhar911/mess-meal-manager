@@ -30,7 +30,8 @@ export const ShoppingExpenses: React.FC<ShoppingExpensesProps> = ({
   isManager = false,
   token
 }) => {
-  const t = useTranslations('nav');
+  const t = useTranslations('shopper');
+  const tNav = useTranslations('nav');
   const tCommon = useTranslations('common');
   const locale = useLocale();
   const queryClient = useQueryClient();
@@ -75,7 +76,9 @@ export const ShoppingExpenses: React.FC<ShoppingExpensesProps> = ({
     onSuccess: () => {
       setIsRecordModalOpen(false);
       setItems([{ name: '', quantity: '', price: 0 }]);
+      setReceiptUrl('');
       queryClient.invalidateQueries({ queryKey: ['expenses-shopping', messId] });
+      queryClient.invalidateQueries({ queryKey: ['shopper-summary'] });
     }
   });
 
@@ -114,31 +117,42 @@ export const ShoppingExpenses: React.FC<ShoppingExpensesProps> = ({
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h3 className="font-semibold text-lg text-text-primary">{t('shopping')}</h3>
+      <div className="flex items-center justify-between pb-1">
+        <h3 className="font-bold text-lg text-text-primary">{tNav('shopping')}</h3>
         <Button onClick={() => setIsRecordModalOpen(true)} size="sm">
-          {tCommon('save')}
+          {t('recordExpense')}
         </Button>
       </div>
 
       {isLoading ? (
-        <p className="text-sm text-text-secondary">{tCommon('loading')}</p>
+        <p className="text-sm text-text-secondary py-6 text-center">{tCommon('loading')}</p>
       ) : !expenses || expenses.length === 0 ? (
-        <Card className="text-center py-8 text-text-secondary text-sm">{tCommon('error')}</Card>
+        <Card className="text-center py-8 text-text-muted text-sm font-medium card-shadow">
+          {t('noExpenses')}
+        </Card>
       ) : (
         <div className="space-y-3">
           {expenses.map((exp) => (
-            <Card key={exp.id} className="space-y-3">
+            <Card key={exp.id} className="space-y-3 card-shadow">
               <div className="flex items-center justify-between pb-2 border-b border-border">
                 <div>
-                  <span className="font-semibold text-text-primary text-base">
+                  <span className="font-bold text-text-primary text-base block">
                     {exp.shopper?.user?.name || 'Shopper'}
                   </span>
-                  <span className="text-xs text-text-muted block">{exp.date}</span>
+                  <span className="text-xs text-text-muted">{exp.date}</span>
                 </div>
                 <div className="text-right">
-                  <span className="font-bold text-lg text-primary">
+                  <span className="font-extrabold text-lg text-primary block">
                     {formatDigit(exp.total)} {tCommon('bdt')}
+                  </span>
+                  <span
+                    className={`text-2xs px-2 py-0.5 rounded-full font-bold ${
+                      exp.status === 'APPROVED'
+                        ? 'bg-success/15 text-success'
+                        : 'bg-warning/15 text-warning'
+                    }`}
+                  >
+                    {exp.status}
                   </span>
                 </div>
               </div>
@@ -147,13 +161,13 @@ export const ShoppingExpenses: React.FC<ShoppingExpensesProps> = ({
               <div className="divide-y divide-border text-sm">
                 {exp.items.map((item) => (
                   <div key={item.id} className="py-1.5 flex items-center justify-between">
-                    <span className="text-text-primary">
+                    <span className="text-text-primary font-medium">
                       {item.name}{' '}
                       {item.quantity && (
                         <span className="text-text-muted text-xs">({item.quantity})</span>
                       )}
                     </span>
-                    <span className="font-medium text-text-secondary">
+                    <span className="font-semibold text-text-secondary">
                       {formatDigit(item.price)} {tCommon('bdt')}
                     </span>
                   </div>
@@ -166,9 +180,9 @@ export const ShoppingExpenses: React.FC<ShoppingExpensesProps> = ({
                     href={exp.receiptUrl}
                     target="_blank"
                     rel="noreferrer"
-                    className="text-xs text-primary hover:underline font-medium"
+                    className="text-xs text-primary hover:underline font-semibold"
                   >
-                    {tCommon('appName')}
+                    {t('viewReceipt')}
                   </a>
                 ) : (
                   <div />
@@ -180,7 +194,7 @@ export const ShoppingExpenses: React.FC<ShoppingExpensesProps> = ({
                     onClick={() => approveMutation.mutate(exp.id)}
                     isLoading={approveMutation.isPending}
                   >
-                    {tCommon('save')}
+                    {t('approveExpense')}
                   </Button>
                 )}
               </div>
@@ -193,47 +207,47 @@ export const ShoppingExpenses: React.FC<ShoppingExpensesProps> = ({
       <Modal
         isOpen={isRecordModalOpen}
         onClose={() => setIsRecordModalOpen(false)}
-        title={t('shopping')}
+        title={t('recordExpense')}
       >
         <div className="space-y-4">
           <Input
-            label={tCommon('status')}
+            label={tCommon('date')}
             type="date"
             value={expenseDate}
             onChange={(e) => setExpenseDate(e.target.value)}
           />
 
           <Input
-            label="Receipt Photo URL"
+            label={t('receipt')}
             placeholder="https://..."
             value={receiptUrl}
             onChange={(e) => setReceiptUrl(e.target.value)}
           />
 
           <div>
-            <label className="text-sm font-medium text-text-secondary mb-2 block">
-              Expense Line Items
+            <label className="text-xs font-semibold text-text-secondary mb-2 block">
+              {t('items')}
             </label>
             <div className="space-y-2">
               {items.map((item, idx) => (
                 <div key={idx} className="flex gap-2 items-center">
                   <input
-                    placeholder="Item name"
+                    placeholder={t('itemName')}
                     className="h-10 px-3 flex-1 bg-surface border border-border rounded-token text-sm text-text-primary"
                     value={item.name}
                     onChange={(e) => updateItemRow(idx, 'name', e.target.value)}
                   />
                   <input
-                    placeholder="Qty"
-                    className="h-10 px-2 w-20 bg-surface border border-border rounded-token text-sm text-text-primary"
+                    placeholder={t('quantity')}
+                    className="h-10 px-2 w-20 bg-surface border border-border rounded-token text-sm text-text-primary text-center"
                     value={item.quantity}
                     onChange={(e) => updateItemRow(idx, 'quantity', e.target.value)}
                   />
                   <input
-                    placeholder="Price"
+                    placeholder={t('price')}
                     type="number"
                     step="0.5"
-                    className="h-10 px-2 w-24 bg-surface border border-border rounded-token text-sm text-text-primary"
+                    className="h-10 px-2 w-24 bg-surface border border-border rounded-token text-sm text-text-primary text-right"
                     value={item.price || ''}
                     onChange={(e) => updateItemRow(idx, 'price', e.target.value)}
                   />
@@ -248,7 +262,7 @@ export const ShoppingExpenses: React.FC<ShoppingExpensesProps> = ({
               className="mt-2"
               onClick={addItemRow}
             >
-              + Add Item
+              + {t('addItem')}
             </Button>
           </div>
 

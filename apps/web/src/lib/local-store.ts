@@ -55,6 +55,7 @@ interface StoredMenu {
 
 interface LocalDatabase {
   users: UserDto[];
+  passwords: Record<string, string>;
   messes: MessDto[];
   memberships: MembershipDto[];
   mealDefaults: StoredMealDefault[];
@@ -305,6 +306,11 @@ function createSeedDatabase(): LocalDatabase {
         note: 'রুই মাছ ও ডাল (Rui Fish & Dal)'
       }
     ],
+    passwords: {
+      '01711223344': 'Password123!',
+      '01722334455': 'Password123!',
+      '01733445566': 'Password123!'
+    },
     roster,
     expenses,
     ledger,
@@ -325,7 +331,15 @@ function loadDb(): LocalDatabase {
     return seeded;
   }
   try {
-    return JSON.parse(raw) as LocalDatabase;
+    const parsed = JSON.parse(raw) as LocalDatabase;
+    if (!parsed.passwords) {
+      parsed.passwords = {
+        '01711223344': 'Password123!',
+        '01722334455': 'Password123!',
+        '01733445566': 'Password123!'
+      };
+    }
+    return parsed;
   } catch {
     const seeded = createSeedDatabase();
     window.localStorage.setItem(DB_STORAGE_KEY, JSON.stringify(seeded));
@@ -422,56 +436,68 @@ export async function handleLocalApiRequest<T>(
   // 1. AUTH ENDPOINTS
   if (path === '/auth/register' && method === 'POST') {
     const cleanPhone = normalizePhone(String(body.phone || ''));
+    if (!cleanPhone || cleanPhone.length < 11) {
+      throw new Error('অনুগ্রহ করে সঠিক ১১ ডিজিটের ফোন নম্বর দিন');
+    }
+    const password = String(body.password || '');
+    if (!password || password.length < 8) {
+      throw new Error('পাসওয়ার্ড কমপক্ষে ৮ অক্ষরের হতে হবে');
+    }
+
     let user = db.users.find((u) => normalizePhone(u.phone) === cleanPhone);
     const nowIso = new Date().toISOString();
 
-    if (!user) {
+    if (user) {
+      const stored = db.passwords[cleanPhone];
+      if (stored && stored !== password) {
+        throw new Error(
+          'এই ফোন নম্বর দিয়ে ইতিমধ্যে অ্যাকাউন্ট রয়েছে, অনুগ্রহ করে সঠিক পাসওয়ার্ড দিয়ে লগইন করুন'
+        );
+      }
+    } else {
       user = {
         id: `usr-${Date.now()}`,
-        name: String(body.name || 'Mess Member').trim(),
+        name: String(body.name || 'সদস্য').trim(),
         phone: cleanPhone,
         avatarUrl: null,
         createdAt: nowIso
       };
       db.users.push(user);
+      db.passwords[cleanPhone] = password;
     }
 
     const defaultMess = db.messes[0];
-    if (defaultMess) {
-      const existingMem = db.memberships.find(
-        (m) => m.userId === user!.id && m.messId === defaultMess.id
-      );
-      if (!existingMem) {
-        const newMem: MembershipDto = {
-          id: `mem-${Date.now()}`,
-          userId: user.id,
-          messId: defaultMess.id,
-          role: MembershipRole.MANAGER,
-          isActive: true,
-          cookBillAmount: '250.00',
-          user,
-          mess: defaultMess,
-          joinedAt: nowIso
-        };
-        db.memberships.push(newMem);
-        db.mealDefaults.push({
-          membershipId: newMem.id,
-          mealType: MealType.FULL,
-          halfSlot: null,
-          eggPreference: EggPreference.NONE
-        });
-        db.ledger.push({
-          id: `led-${Date.now()}`,
-          membershipId: newMem.id,
-          type: LedgerType.DEPOSIT,
-          amount: '3000.00',
-          date: getDhakaDateString(),
-          referenceId: null,
-          note: 'Initial welcome deposit',
-          createdBy: user.id,
-          createdAt: nowIso
-        });
-      }
+    let userMem = db.memberships.find((m) => m.userId === user!.id);
+    if (!userMem && defaultMess) {
+      userMem = {
+        id: `mem-${Date.now()}`,
+        userId: user.id,
+        messId: defaultMess.id,
+        role: db.memberships.length === 0 ? MembershipRole.MANAGER : MembershipRole.BOARDER,
+        isActive: true,
+        cookBillAmount: '250.00',
+        user,
+        mess: defaultMess,
+        joinedAt: nowIso
+      };
+      db.memberships.push(userMem);
+      db.mealDefaults.push({
+        membershipId: userMem.id,
+        mealType: MealType.FULL,
+        halfSlot: null,
+        eggPreference: EggPreference.NONE
+      });
+      db.ledger.push({
+        id: `led-${Date.now()}`,
+        membershipId: userMem.id,
+        type: LedgerType.DEPOSIT,
+        amount: '2500.00',
+        date: getDhakaDateString(),
+        referenceId: null,
+        note: 'স্বাগতম প্রাথমিক জমা (Welcome deposit)',
+        createdBy: user.id,
+        createdAt: nowIso
+      });
     }
 
     saveDb(db);
@@ -480,57 +506,28 @@ export async function handleLocalApiRequest<T>(
     const response: AuthResponseDto = {
       user,
       accessToken: `local-jwt-${user.id}`,
-      activeMessId: db.messes[0]?.id
+      activeMessId: userMem?.messId || db.messes[0]?.id
     };
     return response as unknown as T;
   }
 
   if (path === '/auth/login' && method === 'POST') {
     const cleanPhone = normalizePhone(String(body.phone || ''));
-    let user = db.users.find((u) => normalizePhone(u.phone) === cleanPhone);
-    const nowIso = new Date().toISOString();
+    const password = String(body.password || '');
+    const user = db.users.find((u) => normalizePhone(u.phone) === cleanPhone);
 
     if (!user) {
-      user = {
-        id: `usr-${Date.now()}`,
-        name: `সদস্য (${cleanPhone.slice(-4)})`,
-        phone: cleanPhone,
-        avatarUrl: null,
-        createdAt: nowIso
-      };
-      db.users.push(user);
-
-      const defaultMess = db.messes[0];
-      if (defaultMess) {
-        const newMem: MembershipDto = {
-          id: `mem-${Date.now()}`,
-          userId: user.id,
-          messId: defaultMess.id,
-          role: MembershipRole.MANAGER,
-          isActive: true,
-          cookBillAmount: '250.00',
-          user,
-          mess: defaultMess,
-          joinedAt: nowIso
-        };
-        db.memberships.push(newMem);
-        db.ledger.push({
-          id: `led-${Date.now()}`,
-          membershipId: newMem.id,
-          type: LedgerType.DEPOSIT,
-          amount: '2500.00',
-          date: getDhakaDateString(),
-          referenceId: null,
-          note: 'Initial deposit',
-          createdBy: user.id,
-          createdAt: nowIso
-        });
-      }
-      saveDb(db);
+      throw new Error('এই ফোন নম্বরে কোনো অ্যাকাউন্ট পাওয়া যায়নি। অনুগ্রহ করে আগে অ্যাকাউন্ট তৈরি করুন।');
     }
 
+    const storedPass = db.passwords[cleanPhone];
+    if (storedPass && storedPass !== password) {
+      throw new Error('ভুল পাসওয়ার্ড। অনুগ্রহ করে সঠিক পাসওয়ার্ড দিন।');
+    }
+
+    saveDb(db);
     setSessionUser(user.id);
-    const userMess = db.memberships.find((m) => m.userId === user!.id);
+    const userMess = db.memberships.find((m) => m.userId === user.id);
     const response: AuthResponseDto = {
       user,
       accessToken: `local-jwt-${user.id}`,
@@ -862,15 +859,34 @@ export async function handleLocalApiRequest<T>(
       return summary as unknown as T;
     }
 
-    // MEAL PREFERENCES
-    if (subPath === 'meals/toggle' && method === 'POST') {
-      const existing = db.mealToggles.find((t) => t.membershipId === currentMem.id);
+    // MEAL PREFERENCES & TOGGLES
+    if (
+      (subPath === 'meals/default' ||
+        subPath.startsWith('meals/default/') ||
+        subPath === 'meals/preferences' ||
+        subPath.startsWith('meals/preferences/')) &&
+      method === 'GET'
+    ) {
+      const targetMemId = subPath.split('/')[2] || currentMem.id;
+      const def = db.mealDefaults.find((d) => d.membershipId === targetMemId);
+      const toggle = db.mealToggles.find((t) => t.membershipId === targetMemId);
+      return {
+        mealType: def?.mealType || MealType.FULL,
+        halfSlot: def?.halfSlot || null,
+        eggPreference: def?.eggPreference || EggPreference.NONE,
+        isToggleOn: toggle ? toggle.status : true
+      } as unknown as T;
+    }
+
+    if ((subPath === 'meals/toggle' || subPath.startsWith('meals/toggle/')) && method === 'POST') {
+      const targetMemId = subPath.split('/')[2] || currentMem.id;
+      const existing = db.mealToggles.find((t) => t.membershipId === targetMemId);
       if (existing) {
         existing.status = Boolean(body.status);
         existing.fromDate = String(body.fromDate || getDhakaDateString());
       } else {
         db.mealToggles.push({
-          membershipId: currentMem.id,
+          membershipId: targetMemId,
           status: Boolean(body.status),
           fromDate: String(body.fromDate || getDhakaDateString())
         });
@@ -879,15 +895,19 @@ export async function handleLocalApiRequest<T>(
       return { success: true } as unknown as T;
     }
 
-    if (subPath === 'meals/default' && method === 'POST') {
-      const existing = db.mealDefaults.find((d) => d.membershipId === currentMem.id);
+    if (
+      (subPath === 'meals/default' || subPath.startsWith('meals/default/')) &&
+      method === 'POST'
+    ) {
+      const targetMemId = subPath.split('/')[2] || currentMem.id;
+      const existing = db.mealDefaults.find((d) => d.membershipId === targetMemId);
       if (existing) {
         existing.mealType = body.mealType || MealType.FULL;
         existing.halfSlot = body.halfSlot || null;
         existing.eggPreference = body.eggPreference || EggPreference.NONE;
       } else {
         db.mealDefaults.push({
-          membershipId: currentMem.id,
+          membershipId: targetMemId,
           mealType: body.mealType || MealType.FULL,
           halfSlot: body.halfSlot || null,
           eggPreference: body.eggPreference || EggPreference.NONE
@@ -897,14 +917,18 @@ export async function handleLocalApiRequest<T>(
       return { success: true } as unknown as T;
     }
 
-    if (subPath === 'meals/override' && method === 'POST') {
+    if (
+      (subPath === 'meals/override' || subPath.startsWith('meals/override/')) &&
+      method === 'POST'
+    ) {
+      const targetMemId = subPath.split('/')[2] || currentMem.id;
       const date = String(body.date || getDhakaDateString());
       const slot = (body.slot as SlotType) || SlotType.LUNCH;
       const idx = db.mealOverrides.findIndex(
-        (o) => o.membershipId === currentMem.id && o.date === date && o.slot === slot
+        (o) => o.membershipId === targetMemId && o.date === date && o.slot === slot
       );
       const item: StoredMealOverride = {
-        membershipId: currentMem.id,
+        membershipId: targetMemId,
         date,
         slot,
         status: Boolean(body.status),
@@ -1211,7 +1235,7 @@ export async function handleLocalApiRequest<T>(
         membershipId: targetMemId,
         type: LedgerType.DEPOSIT,
         amount: amountStr,
-        date: getDhakaDateString(),
+        date: String(body.date || getDhakaDateString()),
         referenceId: null,
         note: body.note ? String(body.note) : 'Cash deposit',
         createdBy: currentUser.id,

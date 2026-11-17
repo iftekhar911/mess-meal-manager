@@ -6,6 +6,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   BalanceEvaluationDto,
   LedgerEntryDto,
+  MembershipDto,
   toBengaliDigits,
   getDhakaDateString
 } from '@mess/shared';
@@ -37,29 +38,42 @@ export const LedgerView: React.FC<LedgerViewProps> = ({
   const locale = useLocale();
   const queryClient = useQueryClient();
 
+  const [activeMemberId, setActiveMemberId] = useState<string>(membershipId);
   const [isDepositModalOpen, setIsDepositModalOpen] = useState(false);
   const [depositAmount, setDepositAmount] = useState<number>(1000);
   const [depositNote, setDepositNote] = useState('');
   const [depositDate, setDepositDate] = useState(getDhakaDateString());
+  const [targetDepositMemberId, setTargetDepositMemberId] = useState<string>(membershipId);
 
   const formatDigit = (val: number | string) => {
     return locale === 'bn' ? toBengaliDigits(val) : String(val);
   };
 
+  // Fetch all members if manager
+  const { data: members } = useQuery<MembershipDto[]>({
+    queryKey: ['mess-members', messId],
+    queryFn: () => apiFetch<MembershipDto[]>(`/messes/${messId}/members`, {}, token),
+    enabled: !!messId && isManager
+  });
+
   // Balance query
   const { data: balance, isLoading: isBalanceLoading } = useQuery<BalanceEvaluationDto>({
-    queryKey: ['ledger-balance', membershipId],
+    queryKey: ['ledger-balance', activeMemberId],
     queryFn: () =>
-      apiFetch<BalanceEvaluationDto>(`/messes/${messId}/ledger/balance/${membershipId}`, {}, token),
-    enabled: !!membershipId
+      apiFetch<BalanceEvaluationDto>(
+        `/messes/${messId}/ledger/balance/${activeMemberId}`,
+        {},
+        token
+      ),
+    enabled: !!activeMemberId
   });
 
   // Statement query
   const { data: statement, isLoading: isStatementLoading } = useQuery<LedgerEntryDto[]>({
-    queryKey: ['ledger-statement', membershipId],
+    queryKey: ['ledger-statement', activeMemberId],
     queryFn: () =>
-      apiFetch<LedgerEntryDto[]>(`/messes/${messId}/ledger/statement/${membershipId}`, {}, token),
-    enabled: !!membershipId
+      apiFetch<LedgerEntryDto[]>(`/messes/${messId}/ledger/statement/${activeMemberId}`, {}, token),
+    enabled: !!activeMemberId
   });
 
   // Deposit mutation
@@ -70,7 +84,7 @@ export const LedgerView: React.FC<LedgerViewProps> = ({
         {
           method: 'POST',
           body: JSON.stringify({
-            membershipId,
+            membershipId: targetDepositMemberId,
             amount: depositAmount,
             date: depositDate,
             note: depositNote,
@@ -90,14 +104,32 @@ export const LedgerView: React.FC<LedgerViewProps> = ({
 
   return (
     <div className="space-y-4">
+      {/* Member Filter Bar for Manager */}
+      {isManager && members && members.length > 1 && (
+        <div className="flex items-center justify-between gap-3 p-3 bg-surface border border-border rounded-token card-shadow">
+          <label className="text-xs font-semibold text-text-secondary">{t('selectMember')}:</label>
+          <select
+            value={activeMemberId}
+            onChange={(e) => setActiveMemberId(e.target.value)}
+            className="text-xs font-semibold bg-surface-elevated text-text-primary border border-border px-3 py-1.5 rounded-token focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer"
+          >
+            {members.map((m) => (
+              <option key={m.id} value={m.id}>
+                {m.user?.name || 'Member'} ({m.role})
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+
       {/* Balance Summary Card */}
-      <Card className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <Card className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 card-shadow">
         <div>
-          <span className="text-sm font-medium text-text-secondary">{t('balance')}</span>
+          <span className="text-xs font-semibold text-text-secondary block">{t('balance')}</span>
           <div className="flex items-center gap-3 mt-1">
-            <span className="text-3xl font-bold text-text-primary">
+            <span className="text-3xl font-extrabold text-text-primary">
               {isBalanceLoading ? '...' : formatDigit(balance?.currentBalance || '0.00')}{' '}
-              {tCommon('bdt')}
+              <span className="text-sm font-semibold text-text-muted">{tCommon('bdt')}</span>
             </span>
             {balance && (
               <StatusDot
@@ -111,58 +143,68 @@ export const LedgerView: React.FC<LedgerViewProps> = ({
               />
             )}
           </div>
-          <p className="text-xs text-text-muted mt-1">
+          <p className="text-xs text-text-muted mt-1 font-medium">
             {t('daysLeft')}: {isBalanceLoading ? '...' : formatDigit(balance?.daysRemaining ?? 0)}
           </p>
         </div>
 
         {isManager && (
-          <Button onClick={() => setIsDepositModalOpen(true)} size="sm">
+          <Button
+            onClick={() => {
+              setTargetDepositMemberId(activeMemberId);
+              setIsDepositModalOpen(true);
+            }}
+            size="md"
+          >
             {t('recordDeposit')}
           </Button>
         )}
       </Card>
 
-      {/* Itemized Statement */}
-      <Card>
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="font-semibold text-lg text-text-primary">{t('title')}</h3>
+      {/* Itemized Statement Table */}
+      <Card className="card-shadow space-y-3">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 pb-2 border-b border-border">
+          <h3 className="font-bold text-lg text-text-primary">{t('title')}</h3>
           <span className="text-xs text-text-muted">{t('reversalNotice')}</span>
         </div>
 
         {isStatementLoading ? (
-          <p className="text-sm text-text-secondary">{tCommon('loading')}</p>
+          <p className="text-sm text-text-secondary py-6 text-center">{tCommon('loading')}</p>
         ) : !statement || statement.length === 0 ? (
-          <p className="text-sm text-text-secondary py-6 text-center">{tCommon('error')}</p>
+          <p className="text-sm text-text-muted py-8 text-center font-medium">{t('noEntries')}</p>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm border-collapse">
               <thead>
-                <tr className="border-b border-border text-text-secondary text-xs">
-                  <th className="py-2 text-left">{tCommon('status')}</th>
-                  <th className="py-2 text-left">{tCommon('appName')}</th>
-                  <th className="py-2 text-right">{tCommon('bdt')}</th>
+                <tr className="border-b border-border text-text-secondary text-xs bg-surface-elevated/40">
+                  <th className="py-2.5 px-3 text-left font-semibold">{tCommon('date')}</th>
+                  <th className="py-2.5 px-3 text-left font-semibold">{tCommon('description')}</th>
+                  <th className="py-2.5 px-3 text-right font-semibold">{tCommon('amount')}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
                 {statement.map((entry) => {
                   const isCredit = Number(entry.amount) > 0;
                   return (
-                    <tr key={entry.id} className="hover:bg-surface-elevated/50">
-                      <td className="py-2.5 text-text-secondary">{entry.date}</td>
-                      <td className="py-2.5 text-text-primary font-medium">
-                        {entry.type}{' '}
+                    <tr key={entry.id} className="hover:bg-surface-elevated/50 transition-colors">
+                      <td className="py-3 px-3 text-text-secondary text-xs whitespace-nowrap">
+                        {entry.date}
+                      </td>
+                      <td className="py-3 px-3 text-text-primary font-medium">
+                        <span className="inline-block mr-1.5 font-semibold text-xs px-2 py-0.5 rounded-full bg-surface-elevated border border-border">
+                          {entry.type}
+                        </span>
                         {entry.note && (
-                          <span className="text-text-muted text-xs">({entry.note})</span>
+                          <span className="text-text-secondary text-xs">{entry.note}</span>
                         )}
                       </td>
                       <td
-                        className={`py-2.5 text-right font-bold ${
+                        className={`py-3 px-3 text-right font-bold whitespace-nowrap ${
                           isCredit ? 'text-success' : 'text-danger'
                         }`}
                       >
                         {isCredit ? '+' : ''}
-                        {formatDigit(entry.amount)}
+                        {formatDigit(entry.amount)} {tCommon('bdt')}
                       </td>
                     </tr>
                   );
@@ -180,25 +222,63 @@ export const LedgerView: React.FC<LedgerViewProps> = ({
         title={t('recordDeposit')}
       >
         <div className="space-y-4">
+          {isManager && members && members.length > 1 && (
+            <div>
+              <label className="text-xs font-semibold text-text-secondary mb-1 block">
+                {t('selectMember')}
+              </label>
+              <select
+                value={targetDepositMemberId}
+                onChange={(e) => setTargetDepositMemberId(e.target.value)}
+                className="w-full h-10 px-3 rounded-token border border-border bg-surface text-sm text-text-primary cursor-pointer"
+              >
+                {members.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.user?.name || 'Member'} ({m.role})
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
           <Input
-            label={tCommon('status')}
+            label={tCommon('date')}
             type="date"
             value={depositDate}
             onChange={(e) => setDepositDate(e.target.value)}
           />
 
-          <Input
-            label={t('depositAmount')}
-            type="number"
-            min="10"
-            step="10"
-            value={depositAmount}
-            onChange={(e) => setDepositAmount(Number(e.target.value))}
-          />
+          <div>
+            <Input
+              label={t('depositAmount')}
+              type="number"
+              min="10"
+              step="10"
+              value={depositAmount}
+              onChange={(e) => setDepositAmount(Number(e.target.value))}
+            />
+            {/* Quick preset amount pills */}
+            <div className="flex gap-2 mt-2">
+              {[500, 1000, 2000, 3000, 5000].map((amt) => (
+                <button
+                  key={amt}
+                  type="button"
+                  onClick={() => setDepositAmount(amt)}
+                  className={`text-xs px-2.5 py-1 rounded-token border cursor-pointer font-medium ${
+                    depositAmount === amt
+                      ? 'bg-primary text-white border-primary'
+                      : 'bg-surface border-border text-text-secondary hover:bg-surface-elevated'
+                  }`}
+                >
+                  {formatDigit(amt)}
+                </button>
+              ))}
+            </div>
+          </div>
 
           <Input
-            label={tCommon('appName')}
-            placeholder="e.g., Bank transfer or cash"
+            label={tCommon('note')}
+            placeholder="e.g., Bank transfer, bKash, or cash"
             value={depositNote}
             onChange={(e) => setDepositNote(e.target.value)}
           />

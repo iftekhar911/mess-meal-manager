@@ -14,7 +14,18 @@
     "status": "অবস্থা",
     "actions": "পদক্ষেপ",
     "success": "সফল হয়েছে",
-    "error": "সমস্যা দেখা দিয়েছে"
+    "error": "সমস্যা দেখা দিয়েছে",
+    "date": "তারিখ",
+    "amount": "পরিমাণ",
+    "note": "মন্তব্য",
+    "description": "বিবরণ",
+    "member": "সদস্য",
+    "noData": "কোনো তথ্য নেই",
+    "close": "বন্ধ করুন",
+    "all": "সকল",
+    "filter": "ফিল্টার",
+    "today": "আজ",
+    "quickOverview": "আজকের সারসংক্ষেপ"
   },
   "nav": {
     "dashboard": "ড্যাশবোর্ড",
@@ -67,6 +78,8 @@
   },
   "meals": {
     "title": "মিল ব্যবস্থাপনা",
+    "member": "সদস্য",
+    "totalMeals": "মোট মিল",
     "lunch": "দুপুর",
     "dinner": "রাত",
     "fullMeal": "ফুল মিল (দুপুর ও রাত)",
@@ -77,7 +90,20 @@
     "eggInsteadOfChicken": "মুরগির বদলে ডিম",
     "guestCount": "মেহমান মিল সংখ্যা",
     "continuousToggle": "মিল চালু বা বন্ধ রাখুন",
-    "lockNotice": "কাটঅফ সময়ের পর মিল পরিবর্তন ম্যানেজার ব্যতীত সম্ভব নয়"
+    "lockNotice": "কাটঅফ সময়ের পর মিল পরিবর্তন ম্যানেজার ব্যতীত সম্ভব নয়",
+    "overrideTitle": "একদিনের মিল পরিবর্তন",
+    "slot": "মিল বেলা",
+    "status": "মিল অবস্থা",
+    "on": "চালু",
+    "off": "বন্ধ",
+    "autoOff": "স্বয়ংক্রিয় বন্ধ",
+    "healthy": "পর্যাপ্ত ব্যালেন্স",
+    "warning": "সতর্কতা",
+    "danger": "কম ব্যালেন্স",
+    "todayMealStatus": "আজকের মিল অবস্থা",
+    "lunchDinner": "দুপুর ও রাত",
+    "savePreference": "পছন্দ সংরক্ষণ করুন",
+    "preferencesSaved": "পছন্দ সফলভাবে সংরক্ষিত হয়েছে"
   },
   "shopper": {
     "summaryTitle": "আজকের বাজার সারাংশ",
@@ -92,7 +118,20 @@
     "dinnerCount": "রাতের মিল",
     "eggTotal": "মোট ডিম চাহিদা",
     "guestTotal": "মেহমান মিল",
-    "budgetRequired": "প্রয়োজনীয় আনুমানিক টাকা"
+    "budgetRequired": "প্রয়োজনীয় আনুমানিক টাকা",
+    "recordExpense": "বাজার খরচ যুক্ত করুন",
+    "approveExpense": "অনুমোদন করুন",
+    "receipt": "রশিদ",
+    "viewReceipt": "রশিদ দেখুন",
+    "noExpenses": "কোনো বাজার খরচ পাওয়া যায়নি",
+    "items": "বাজারের ফর্দ",
+    "itemName": "পণ্যের নাম",
+    "quantity": "পরিমাণ",
+    "price": "দাম",
+    "addItem": "নতুন পণ্য যোগ করুন",
+    "dutyShopper": "আজকের বাজারকারী",
+    "callShopper": "কল করুন",
+    "noShopperAssigned": "আজ কারো বাজার দায়িত্ব নেই"
   },
   "ledger": {
     "title": "হিসাবের খাতা",
@@ -101,7 +140,13 @@
     "daysLeft": "দিনের ব্যালেন্স অবশিষ্ট",
     "recordDeposit": "টাকা জমা রেকর্ড করুন",
     "depositAmount": "জমার পরিমাণ",
-    "reversalNotice": "ভুল সংশোধনে কেবল রিভার্সিং এন্ট্রি করা হয়"
+    "reversalNotice": "ভুল সংশোধনে কেবল রিভার্সিং এন্ট্রি করা হয়",
+    "selectMember": "সদস্য নির্বাচন করুন",
+    "depositHistory": "জমা ও খরচের বিবরণ",
+    "noEntries": "কোনো লেনদেনের রেকর্ড নেই",
+    "allMembers": "সকল সদস্যের ব্যালেন্স",
+    "netBalance": "নিট ব্যালেন্স",
+    "daysRemaining": "দিন অবশিষ্ট"
   },
   "reports": {
     "title": "মাসিক হিসাব বিবরণী",
@@ -116,7 +161,23 @@
     "monthClosed": "এই মাসের হিসাব সমাপ্ত ও সিল করা হয়েছে",
     "exportPdf": "প্রিন্ট করুন",
     "fuelDeficit": "প্রকৃত গ্যাস খরচ",
-    "managerLiability": "ম্যানেজার দায়বদ্ধতা অডিট"
+    "managerLiability": "ম্যানেজার দায়বদ্ধতা অডিট",
+    "member": "সদস্য",
+    "mealCount": "মিল সংখ্যা",
+    "mealCost": "মিল খরচ",
+    "fuelCost": "গ্যাস বিল",
+    "cookBill": "খালা বিল",
+    "otherCost": "অন্যান্য",
+    "totalCost": "মোট খরচ",
+    "balanceDue": "অবশিষ্ট ব্যালেন্স",
+    "actualFuelCostLabel": "প্রকৃত গ্যাস বা জ্বালানি খরচ"
+  },
+  "notices": {
+    "postNotice": "নতুন বিজ্ঞপ্তি দিন",
+    "noticeTitle": "বিজ্ঞপ্তির শিরোনাম",
+    "noticeBody": "বিজ্ঞপ্তির বিস্তারিত",
+    "noNotices": "বর্তমানে কোনো বিজ্ঞপ্তি নেই",
+    "publishedBy": "প্রকাশক"
   },
   "audit": {
     "title": "অডিট ট্রেইল",

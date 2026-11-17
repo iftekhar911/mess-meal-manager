@@ -7,6 +7,7 @@ import { NoticeDto } from '@mess/shared';
 import { Card } from '../../ui/card';
 import { Button } from '../../ui/button';
 import { Input } from '../../ui/input';
+import { Textarea } from '../../ui/textarea';
 import { Modal } from '../../ui/modal';
 import { apiFetch } from '../../../lib/api-client';
 
@@ -20,7 +21,8 @@ export interface NoticeBoardProps {
  * Notice board listing announcements and enabling managers to post new notices.
  */
 export const NoticeBoard: React.FC<NoticeBoardProps> = ({ messId, isManager = false, token }) => {
-  const t = useTranslations('nav');
+  const t = useTranslations('notices');
+  const tNav = useTranslations('nav');
   const tCommon = useTranslations('common');
   const queryClient = useQueryClient();
 
@@ -54,30 +56,39 @@ export const NoticeBoard: React.FC<NoticeBoardProps> = ({ messId, isManager = fa
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h3 className="font-semibold text-lg text-text-primary">{t('notices')}</h3>
+      <div className="flex items-center justify-between pb-1">
+        <h3 className="font-bold text-lg text-text-primary">{tNav('notices')}</h3>
         {isManager && (
           <Button onClick={() => setIsPostModalOpen(true)} size="sm">
-            {tCommon('actions')}
+            {t('postNotice')}
           </Button>
         )}
       </div>
 
       {isLoading ? (
-        <p className="text-sm text-text-secondary">{tCommon('loading')}</p>
+        <p className="text-sm text-text-secondary py-6 text-center">{tCommon('loading')}</p>
       ) : !notices || notices.length === 0 ? (
-        <Card className="text-center py-8 text-text-secondary text-sm">{tCommon('error')}</Card>
+        <Card className="text-center py-8 text-text-muted text-sm font-medium card-shadow">
+          {t('noNotices')}
+        </Card>
       ) : (
         <div className="space-y-3">
           {notices.map((notice) => (
-            <Card key={notice.id} className="space-y-2">
+            <Card key={notice.id} className="space-y-2 card-shadow">
               <div className="flex items-center justify-between">
-                <h4 className="font-semibold text-base text-text-primary">{notice.title}</h4>
-                <span className="text-xs text-text-muted">{notice.createdAt.slice(0, 10)}</span>
+                <h4 className="font-bold text-base text-text-primary">{notice.title}</h4>
+                <span className="text-2xs text-text-muted px-2 py-0.5 rounded-full bg-surface-elevated border border-border">
+                  {notice.createdAt.slice(0, 10)}
+                </span>
               </div>
-              <p className="text-sm text-text-secondary leading-relaxed">{notice.body}</p>
+              <p className="text-sm text-text-secondary leading-relaxed whitespace-pre-wrap">
+                {notice.body}
+              </p>
               {notice.authorName && (
-                <span className="text-xs text-text-muted block">{notice.authorName}</span>
+                <div className="pt-2 border-t border-border flex items-center gap-1.5 text-xs text-text-muted font-medium">
+                  <span>{t('publishedBy')}:</span>
+                  <span className="text-text-primary font-semibold">{notice.authorName}</span>
+                </div>
               )}
             </Card>
           ))}
@@ -88,25 +99,23 @@ export const NoticeBoard: React.FC<NoticeBoardProps> = ({ messId, isManager = fa
       <Modal
         isOpen={isPostModalOpen}
         onClose={() => setIsPostModalOpen(false)}
-        title={t('notices')}
+        title={t('postNotice')}
       >
         <div className="space-y-4">
           <Input
-            label={tCommon('status')}
-            placeholder="Notice title"
+            label={t('noticeTitle')}
+            placeholder="e.g., Monthly meeting or grocery duty notice"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
           />
 
-          <div className="flex flex-col gap-1">
-            <label className="text-sm font-medium text-text-secondary">{tCommon('appName')}</label>
-            <textarea
-              className="min-h-[100px] p-3 bg-surface border border-border rounded-token text-base text-text-primary placeholder:text-text-muted focus-ring transition-colors"
-              placeholder="Notice description and details"
-              value={body}
-              onChange={(e) => setBody(e.target.value)}
-            />
-          </div>
+          <Textarea
+            label={t('noticeBody')}
+            placeholder="Write announcement details..."
+            rows={4}
+            value={body}
+            onChange={(e) => setBody(e.target.value)}
+          />
 
           <div className="flex justify-end gap-2 pt-3 border-t border-border">
             <Button variant="secondary" size="sm" onClick={() => setIsPostModalOpen(false)}>
@@ -116,6 +125,7 @@ export const NoticeBoard: React.FC<NoticeBoardProps> = ({ messId, isManager = fa
               size="sm"
               isLoading={postMutation.isPending}
               onClick={() => postMutation.mutate()}
+              disabled={!title.trim() || !body.trim()}
             >
               {tCommon('save')}
             </Button>

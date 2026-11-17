@@ -5,7 +5,7 @@
 :root {
   --radius: 0.75rem;
 
-  /* Theme tokens: light / clean palette */
+  /* Theme tokens: crisp, modern, high-contrast palette */
   --color-bg: #f8fafc;
   --color-surface: #ffffff;
   --color-surface-elevated: #f1f5f9;
@@ -13,7 +13,7 @@
   --color-border-strong: #cbd5e1;
 
   --color-text-primary: #0f172a;
-  --color-text-secondary: #475569;
+  --color-text-secondary: #334155;
   --color-text-muted: #64748b;
 
   --color-primary: #059669;
@@ -50,4 +50,29 @@
 /* Accessible focus ring applied consistently */
 .focus-ring {
   @apply outline-none ring-2 ring-primary ring-offset-2 ring-offset-background;
+}
+
+/* Subtle card shadow */
+.card-shadow {
+  box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.05), 0 1px 2px -1px rgb(0 0 0 / 0.05);
+}
+
+.card-shadow-hover {
+  transition: all 0.2s ease-in-out;
+}
+.card-shadow-hover:hover {
+  box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.08), 0 2px 4px -2px rgb(0 0 0 / 0.06);
+}
+
+@media print {
+  header,
+  nav,
+  button,
+  .no-print {
+    display: none !important;
+  }
+  body {
+    background: #ffffff !important;
+    color: #000000 !important;
+  }
 }

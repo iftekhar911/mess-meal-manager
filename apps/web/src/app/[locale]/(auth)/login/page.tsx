@@ -57,16 +57,32 @@ export default function LoginPage() {
       </div>
 
       <div className="w-full max-w-md">
-        <div className="text-center mb-6">
+        {/* Logo and Brand Header */}
+        <div className="text-center mb-8">
+          <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-primary-surface text-primary border border-primary/20 shadow-xs mb-3">
+            <svg
+              className="w-7 h-7"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+              strokeWidth="2"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"
+              />
+            </svg>
+          </div>
           <h1 className="text-2xl font-bold text-text-primary">{tCommon('appName')}</h1>
           <p className="text-sm text-text-secondary mt-1">{t('loginSubtitle')}</p>
         </div>
 
-        <Card>
-          <h2 className="text-xl font-semibold text-text-primary mb-4">{t('loginTitle')}</h2>
+        <Card className="p-6 sm:p-8">
+          <h2 className="text-xl font-bold text-text-primary mb-6">{t('loginTitle')}</h2>
 
           {serverError && (
-            <div className="p-3 mb-4 rounded-token bg-danger-surface border border-danger text-sm text-danger">
+            <div className="p-3.5 mb-5 rounded-token bg-danger-surface border border-danger/30 text-sm text-danger font-medium">
               {serverError}
             </div>
           )}
@@ -88,22 +104,16 @@ export default function LoginPage() {
               {...register('password')}
             />
 
-            <Button type="submit" className="w-full" isLoading={isSubmitting}>
+            <Button type="submit" className="w-full mt-2" isLoading={isSubmitting}>
               {t('loginButton')}
-            </Button>
-
-            <Button
-              type="button"
-              variant="secondary"
-              className="w-full"
-              onClick={() => onSubmit({ phone: '01711223344', password: 'Password123!' })}
-            >
-              {t('loginButton')} (01711223344)
             </Button>
           </form>
 
-          <div className="mt-6 text-center text-sm text-text-secondary">
-            <Link href="/register" className="text-primary hover:underline font-medium">
+          <div className="mt-6 pt-5 border-t border-border text-center">
+            <Link
+              href="/register"
+              className="text-sm font-medium text-primary hover:text-primary-hover hover:underline transition-colors"
+            >
               {t('noAccount')}
             </Link>
           </div>

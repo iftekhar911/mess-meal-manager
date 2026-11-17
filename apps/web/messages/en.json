@@ -14,7 +14,18 @@
     "status": "Status",
     "actions": "Actions",
     "success": "Action succeeded",
-    "error": "An error occurred"
+    "error": "An error occurred",
+    "date": "Date",
+    "amount": "Amount",
+    "note": "Note",
+    "description": "Description",
+    "member": "Member",
+    "noData": "No records found",
+    "close": "Close",
+    "all": "All",
+    "filter": "Filter",
+    "today": "Today",
+    "quickOverview": "Today at a Glance"
   },
   "nav": {
     "dashboard": "Dashboard",
@@ -67,6 +78,8 @@
   },
   "meals": {
     "title": "Meal Management",
+    "member": "Member",
+    "totalMeals": "Total Meals",
     "lunch": "Lunch",
     "dinner": "Dinner",
     "fullMeal": "Full Meal (Lunch and Dinner)",
@@ -77,7 +90,20 @@
     "eggInsteadOfChicken": "Egg instead of chicken",
     "guestCount": "Guest Meal Count",
     "continuousToggle": "Continuous Meal Switch",
-    "lockNotice": "After cutoff time, meal adjustments require manager action"
+    "lockNotice": "After cutoff time, meal adjustments require manager action",
+    "overrideTitle": "Single-Day Meal Override",
+    "slot": "Meal Slot",
+    "status": "Meal Status",
+    "on": "ON",
+    "off": "OFF",
+    "autoOff": "Auto-Off",
+    "healthy": "Healthy Balance",
+    "warning": "Warning",
+    "danger": "Low Balance",
+    "todayMealStatus": "Today Meal Status",
+    "lunchDinner": "Lunch and Dinner",
+    "savePreference": "Save Preferences",
+    "preferencesSaved": "Preferences saved successfully"
   },
   "shopper": {
     "summaryTitle": "Today Shopper Summary",
@@ -92,7 +118,20 @@
     "dinnerCount": "Dinner Meals",
     "eggTotal": "Egg Requests",
     "guestTotal": "Guest Meals",
-    "budgetRequired": "Required Estimated Budget"
+    "budgetRequired": "Required Estimated Budget",
+    "recordExpense": "Record Shopping Expense",
+    "approveExpense": "Approve Expense",
+    "receipt": "Receipt",
+    "viewReceipt": "View Receipt",
+    "noExpenses": "No shopping expenses recorded",
+    "items": "Items List",
+    "itemName": "Item Name",
+    "quantity": "Quantity",
+    "price": "Price",
+    "addItem": "Add Item",
+    "dutyShopper": "Today Shopper",
+    "callShopper": "Call Shopper",
+    "noShopperAssigned": "No shopper assigned today"
   },
   "ledger": {
     "title": "Account Ledger",
@@ -101,7 +140,13 @@
     "daysLeft": "Days of Balance Left",
     "recordDeposit": "Record Deposit",
     "depositAmount": "Deposit Amount",
-    "reversalNotice": "Corrections are recorded strictly as reversing entries"
+    "reversalNotice": "Corrections are recorded strictly as reversing entries",
+    "selectMember": "Select Member",
+    "depositHistory": "Ledger History",
+    "noEntries": "No ledger entries found",
+    "allMembers": "All Members Balance",
+    "netBalance": "Net Balance",
+    "daysRemaining": "Days Remaining"
   },
   "reports": {
     "title": "Monthly Reports",
@@ -116,7 +161,23 @@
     "monthClosed": "This month is closed and locked",
     "exportPdf": "Print Statement",
     "fuelDeficit": "Actual Fuel Cost",
-    "managerLiability": "Manager Liability Audit"
+    "managerLiability": "Manager Liability Audit",
+    "member": "Member",
+    "mealCount": "Meal Count",
+    "mealCost": "Meal Cost",
+    "fuelCost": "Gas Bill",
+    "cookBill": "Cook Bill",
+    "otherCost": "Other Cost",
+    "totalCost": "Total Cost",
+    "balanceDue": "Net Balance",
+    "actualFuelCostLabel": "Actual Fuel or Utility Cost"
+  },
+  "notices": {
+    "postNotice": "Post Notice",
+    "noticeTitle": "Notice Title",
+    "noticeBody": "Notice Details",
+    "noNotices": "No announcements at this time",
+    "publishedBy": "Published by"
   },
   "audit": {
     "title": "Audit Trail",
