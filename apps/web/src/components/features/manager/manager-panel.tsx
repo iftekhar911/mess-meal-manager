@@ -42,6 +42,7 @@ export const ManagerPanel: React.FC<ManagerPanelProps> = ({ messId, isManager = 
   const tMeals = useTranslations('meals');
   const tLedger = useTranslations('ledger');
   const tShopper = useTranslations('shopper');
+  const tOnboard = useTranslations('onboarding');
   const locale = useLocale();
   const queryClient = useQueryClient();
 
@@ -88,6 +89,38 @@ export const ManagerPanel: React.FC<ManagerPanelProps> = ({ messId, isManager = 
     enabled: !!messId && isManager
   });
 
+  interface JoinRequestItem {
+    id: string;
+    userName: string;
+    userPhone: string;
+    note: string | null;
+    createdAt: string;
+  }
+
+  const { data: joinRequests } = useQuery<JoinRequestItem[]>({
+    queryKey: ['join-requests', messId],
+    queryFn: () => apiFetch<JoinRequestItem[]>(`/messes/${messId}/join-requests`, {}, token),
+    enabled: !!messId && isManager
+  });
+
+  interface RatesResponse {
+    current: { mealRate: string; cookBill: string; fuelBill: string };
+    history: {
+      id: string;
+      effectiveFrom: string;
+      mealRate: string;
+      cookBill: string;
+      fuelBill: string;
+      updatedBy: string | null;
+    }[];
+  }
+
+  const { data: ratesData } = useQuery<RatesResponse>({
+    queryKey: ['mess-rates', messId],
+    queryFn: () => apiFetch<RatesResponse>(`/messes/${messId}/rates`, {}, token),
+    enabled: !!messId && isManager
+  });
+
   // Member form states
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [newPhone, setNewPhone] = useState('');
@@ -120,10 +153,13 @@ export const ManagerPanel: React.FC<ManagerPanelProps> = ({ messId, isManager = 
   const [fuelAmount, setFuelAmount] = useState(1400);
   const [fuelNote, setFuelNote] = useState('');
 
-  // Settings states
+  // Settings & Effective-Dated Rates states
   const [messName, setMessName] = useState('');
   const [cutoffTime, setCutoffTime] = useState('22:00:00');
   const [mealRate, setMealRate] = useState(50);
+  const [rateCookBill, setRateCookBill] = useState(250);
+  const [rateFuelBill, setRateFuelBill] = useState(0);
+  const [rateEffectiveFrom, setRateEffectiveFrom] = useState(today);
   const [graceDays, setGraceDays] = useState(3);
   const [warningDays, setWarningDays] = useState(2);
   const [shoppersPerDay, setShoppersPerDay] = useState(2);
@@ -146,10 +182,21 @@ export const ManagerPanel: React.FC<ManagerPanelProps> = ({ messId, isManager = 
     }
   }, [currentMess]);
 
+  useEffect(() => {
+    if (ratesData?.current) {
+      setMealRate(Number(ratesData.current.mealRate));
+      setRateCookBill(Number(ratesData.current.cookBill));
+      setRateFuelBill(Number(ratesData.current.fuelBill));
+    }
+  }, [ratesData]);
+
   const invalidateAll = () => {
     queryClient.invalidateQueries({ queryKey: ['mess-members'] });
     queryClient.invalidateQueries({ queryKey: ['mess-members-all', messId] });
     queryClient.invalidateQueries({ queryKey: ['my-messes'] });
+    queryClient.invalidateQueries({ queryKey: ['mess-directory'] });
+    queryClient.invalidateQueries({ queryKey: ['join-requests', messId] });
+    queryClient.invalidateQueries({ queryKey: ['mess-rates', messId] });
     queryClient.invalidateQueries({ queryKey: ['heatmap'] });
     queryClient.invalidateQueries({ queryKey: ['shopper-summary'] });
     queryClient.invalidateQueries({ queryKey: ['my-balance'] });
@@ -350,6 +397,38 @@ export const ManagerPanel: React.FC<ManagerPanelProps> = ({ messId, isManager = 
     onError: handleErr
   });
 
+  const rateUpdateMutation = useMutation({
+    mutationFn: () =>
+      apiFetch(
+        `/messes/${messId}/rates`,
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            effectiveFrom: rateEffectiveFrom,
+            mealRate: Number(mealRate),
+            cookBill: Number(rateCookBill),
+            fuelBill: Number(rateFuelBill)
+          })
+        },
+        token
+      ),
+    onSuccess: () => {
+      invalidateAll();
+      notify('success', tCommon('success'));
+    },
+    onError: handleErr
+  });
+
+  const joinRequestMutation = useMutation({
+    mutationFn: ({ reqId, action }: { reqId: string; action: 'approve' | 'reject' }) =>
+      apiFetch(`/messes/${messId}/join-requests/${reqId}/${action}`, { method: 'POST' }, token),
+    onSuccess: () => {
+      invalidateAll();
+      notify('success', tCommon('success'));
+    },
+    onError: handleErr
+  });
+
   if (!isManager) {
     return (
       <Card className="text-center py-12 space-y-3">
@@ -370,11 +449,17 @@ export const ManagerPanel: React.FC<ManagerPanelProps> = ({ messId, isManager = 
   }));
 
   const sectionButtons: { key: AdminSection; label: string }[] = [
-    { key: 'members', label: t('title') },
+    {
+      key: 'members',
+      label:
+        joinRequests && joinRequests.length > 0
+          ? `${t('title')} (${formatDigit(joinRequests.length)})`
+          : t('title')
+    },
     { key: 'finance', label: tLedger('recordDeposit') },
     { key: 'meals', label: tMeals('overrideTitle') },
     { key: 'fuel', label: tShopper('recordExpense') },
-    { key: 'settings', label: tMess('cutoffTime') }
+    { key: 'settings', label: tMess('ratesTitle') }
   ];
 
   return (
@@ -417,9 +502,53 @@ export const ManagerPanel: React.FC<ManagerPanelProps> = ({ messId, isManager = 
         ))}
       </div>
 
-      {/* SECTION 1: MEMBERS */}
+      {/* SECTION 1: MEMBERS & PENDING JOIN REQUESTS */}
       {section === 'members' && (
         <div className="space-y-4">
+          {joinRequests && joinRequests.length > 0 && (
+            <Card className="space-y-3 border-primary/40 bg-primary-surface/40">
+              <h3 className="font-bold text-base text-primary">
+                {tOnboard('pendingRequestsTitle')} ({formatDigit(joinRequests.length)})
+              </h3>
+              <div className="divide-y divide-border">
+                {joinRequests.map((jr) => (
+                  <div
+                    key={jr.id}
+                    className="py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+                  >
+                    <div>
+                      <span className="font-bold text-sm text-text-primary block">
+                        {jr.userName}
+                      </span>
+                      <span className="text-xs text-text-secondary">{jr.userPhone}</span>
+                    </div>
+                    <div className="flex gap-2">
+                      <Button
+                        size="sm"
+                        variant="danger"
+                        isLoading={joinRequestMutation.isPending}
+                        onClick={() =>
+                          joinRequestMutation.mutate({ reqId: jr.id, action: 'reject' })
+                        }
+                      >
+                        {tOnboard('rejectRequest')}
+                      </Button>
+                      <Button
+                        size="sm"
+                        isLoading={joinRequestMutation.isPending}
+                        onClick={() =>
+                          joinRequestMutation.mutate({ reqId: jr.id, action: 'approve' })
+                        }
+                      >
+                        {tOnboard('approveRequest')}
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </Card>
+          )}
+
           <div className="grid grid-cols-3 gap-2.5">
             <Card className="p-3 text-center">
               <span className="text-xs text-text-secondary block">{t('activeTab')}</span>
@@ -762,57 +891,141 @@ export const ManagerPanel: React.FC<ManagerPanelProps> = ({ messId, isManager = 
         </div>
       )}
 
-      {/* SECTION 5: MESS SETTINGS */}
+      {/* SECTION 5: EFFECTIVE-DATED RATES & MESS SETTINGS */}
       {section === 'settings' && (
-        <Card className="space-y-4 max-w-xl">
-          <h3 className="font-bold text-base text-text-primary">{tMess('messName')}</h3>
-          <Input
-            label={tMess('messName')}
-            value={messName}
-            onChange={(e) => setMessName(e.target.value)}
-          />
-          <div className="grid grid-cols-2 gap-3">
-            <Input
-              label={tMess('cutoffTime')}
-              value={cutoffTime}
-              onChange={(e) => setCutoffTime(e.target.value)}
-            />
-            <Input
-              label={tMess('mealRate')}
-              type="number"
-              step="0.5"
-              value={mealRate}
-              onChange={(e) => setMealRate(Number(e.target.value))}
-            />
+        <div className="space-y-5">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            {/* Effective-Dated Rates Card */}
+            <Card className="space-y-4">
+              <div>
+                <h3 className="font-bold text-base text-text-primary">{tMess('ratesTitle')}</h3>
+                <p className="text-xs text-text-secondary mt-0.5">{tMess('ratesHint')}</p>
+              </div>
+
+              <Input
+                label={tMess('effectiveFrom')}
+                type="date"
+                value={rateEffectiveFrom}
+                onChange={(e) => setRateEffectiveFrom(e.target.value)}
+              />
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <Input
+                  label={tMess('mealRate')}
+                  type="number"
+                  step="0.5"
+                  min="0"
+                  value={mealRate}
+                  onChange={(e) => setMealRate(Number(e.target.value))}
+                />
+                <Input
+                  label={tMess('cookBillMonthly')}
+                  type="number"
+                  step="10"
+                  min="0"
+                  value={rateCookBill}
+                  onChange={(e) => setRateCookBill(Number(e.target.value))}
+                />
+                <Input
+                  label={tMess('fuelBillMonthly')}
+                  type="number"
+                  step="10"
+                  min="0"
+                  value={rateFuelBill}
+                  onChange={(e) => setRateFuelBill(Number(e.target.value))}
+                />
+              </div>
+
+              <Button
+                className="w-full"
+                isLoading={rateUpdateMutation.isPending}
+                onClick={() => rateUpdateMutation.mutate()}
+              >
+                {tMess('saveRates')}
+              </Button>
+            </Card>
+
+            {/* General Mess Settings */}
+            <Card className="space-y-4">
+              <h3 className="font-bold text-base text-text-primary">{tMess('messName')}</h3>
+              <Input
+                label={tMess('messName')}
+                value={messName}
+                onChange={(e) => setMessName(e.target.value)}
+              />
+              <Input
+                label={tMess('cutoffTime')}
+                value={cutoffTime}
+                onChange={(e) => setCutoffTime(e.target.value)}
+              />
+              <div className="grid grid-cols-3 gap-3">
+                <Input
+                  label={tMess('graceDays')}
+                  type="number"
+                  value={graceDays}
+                  onChange={(e) => setGraceDays(Number(e.target.value))}
+                />
+                <Input
+                  label={tMess('warningDays')}
+                  type="number"
+                  value={warningDays}
+                  onChange={(e) => setWarningDays(Number(e.target.value))}
+                />
+                <Input
+                  label={tMess('shoppersPerDay')}
+                  type="number"
+                  value={shoppersPerDay}
+                  onChange={(e) => setShoppersPerDay(Number(e.target.value))}
+                />
+              </div>
+              <Button
+                variant="secondary"
+                className="w-full"
+                isLoading={settingsMutation.isPending}
+                onClick={() => settingsMutation.mutate()}
+              >
+                {tCommon('save')}
+              </Button>
+            </Card>
           </div>
-          <div className="grid grid-cols-3 gap-3">
-            <Input
-              label={tMess('graceDays')}
-              type="number"
-              value={graceDays}
-              onChange={(e) => setGraceDays(Number(e.target.value))}
-            />
-            <Input
-              label={tMess('warningDays')}
-              type="number"
-              value={warningDays}
-              onChange={(e) => setWarningDays(Number(e.target.value))}
-            />
-            <Input
-              label={tMess('shoppersPerDay')}
-              type="number"
-              value={shoppersPerDay}
-              onChange={(e) => setShoppersPerDay(Number(e.target.value))}
-            />
-          </div>
-          <Button
-            className="w-full"
-            isLoading={settingsMutation.isPending}
-            onClick={() => settingsMutation.mutate()}
-          >
-            {tCommon('save')}
-          </Button>
-        </Card>
+
+          {/* Rate Change History Table */}
+          {ratesData?.history && ratesData.history.length > 0 && (
+            <Card className="space-y-3">
+              <h3 className="font-bold text-base text-text-primary">{tMess('rateHistory')}</h3>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm border-collapse">
+                  <thead>
+                    <tr className="border-b border-border text-xs text-text-secondary bg-surface-elevated/40">
+                      <th className="py-2 px-3 text-left">{tMess('effectiveFrom')}</th>
+                      <th className="py-2 px-3 text-right">{tMess('mealRate')}</th>
+                      <th className="py-2 px-3 text-right">{tMess('cookBillMonthly')}</th>
+                      <th className="py-2 px-3 text-right">{tMess('fuelBillMonthly')}</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border">
+                    {ratesData.history.map((h) => (
+                      <tr key={h.id}>
+                        <td className="py-2.5 px-3 font-semibold text-text-primary">
+                          {h.effectiveFrom}
+                        </td>
+                        <td className="py-2.5 px-3 text-right font-semibold text-primary">
+                          {formatDigit(h.mealRate)} {tCommon('bdt')}
+                        </td>
+                        <td className="py-2.5 px-3 text-right">
+                          {formatDigit(h.cookBill)} {tCommon('bdt')}
+                        </td>
+                        <td className="py-2.5 px-3 text-right">
+                          {formatDigit(h.fuelBill)} {tCommon('bdt')}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </Card>
+          )}
+        </div>
       )}
 
       {/* Add Boarder Modal */}

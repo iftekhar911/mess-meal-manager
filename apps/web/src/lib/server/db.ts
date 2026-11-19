@@ -180,12 +180,41 @@ export async function ensureSchema(): Promise<void> {
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
 
+    ALTER TABLE mm_messes ADD COLUMN IF NOT EXISTS default_cook_bill NUMERIC(10, 2) NOT NULL DEFAULT 250.00;
+    ALTER TABLE mm_messes ADD COLUMN IF NOT EXISTS default_fuel_bill NUMERIC(10, 2) NOT NULL DEFAULT 0.00;
+
+    CREATE TABLE IF NOT EXISTS mm_join_requests (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      user_id UUID NOT NULL REFERENCES mm_users(id) ON DELETE CASCADE,
+      mess_id UUID NOT NULL REFERENCES mm_messes(id) ON DELETE CASCADE,
+      status TEXT NOT NULL DEFAULT 'PENDING',
+      note TEXT,
+      reviewed_by UUID REFERENCES mm_users(id) ON DELETE SET NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE (user_id, mess_id)
+    );
+
+    CREATE TABLE IF NOT EXISTS mm_rate_history (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      mess_id UUID NOT NULL REFERENCES mm_messes(id) ON DELETE CASCADE,
+      effective_from TEXT NOT NULL,
+      meal_rate NUMERIC(10, 2) NOT NULL,
+      cook_bill NUMERIC(10, 2) NOT NULL DEFAULT 250.00,
+      fuel_bill NUMERIC(10, 2) NOT NULL DEFAULT 0.00,
+      created_by UUID REFERENCES mm_users(id) ON DELETE SET NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE (mess_id, effective_from)
+    );
+
     CREATE INDEX IF NOT EXISTS idx_mm_memberships_mess ON mm_memberships(mess_id);
     CREATE INDEX IF NOT EXISTS idx_mm_memberships_user ON mm_memberships(user_id);
     CREATE INDEX IF NOT EXISTS idx_mm_overrides_mess_date ON mm_meal_overrides(mess_id, date);
     CREATE INDEX IF NOT EXISTS idx_mm_ledger_member ON mm_ledger_entries(membership_id);
     CREATE INDEX IF NOT EXISTS idx_mm_roster_mess_date ON mm_shopping_roster(mess_id, date);
     CREATE INDEX IF NOT EXISTS idx_mm_expenses_mess_date ON mm_shopping_expenses(mess_id, date);
+    CREATE INDEX IF NOT EXISTS idx_mm_join_req_mess ON mm_join_requests(mess_id, status);
+    CREATE INDEX IF NOT EXISTS idx_mm_rate_hist_mess ON mm_rate_history(mess_id, effective_from);
   `);
 
   globalForPg.schemaInitialized = true;

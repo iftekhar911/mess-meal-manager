@@ -18,8 +18,10 @@ import { HttpError, requireAuth, requireMembership } from '../auth';
 import {
   MealDefaultRow,
   MealOverrideRow,
+  RateHistoryRow,
   evaluateMemberBalance,
   mapMessRow,
+  resolveRateForDate,
   resolveSlot,
   writeAuditLog
 } from '../mess-calc';
@@ -441,6 +443,150 @@ export async function handleFinanceRoute(
 
       return NextResponse.json({ data: res.rows[0] }, { status: 201 });
     }
+
+    // PATCH /ledger/:entryId (MANAGER ONLY: edit deposit/ledger entry with audit trail)
+    if (subSegments.length === 2 && method === 'PATCH') {
+      if (membership.role !== MembershipRole.MANAGER) {
+        throw new HttpError(403, 'FORBIDDEN', 'Only managers can edit deposit records');
+      }
+      const entryId = subSegments[1]!;
+      const beforeRes = await pool.query(
+        `SELECT * FROM mm_ledger_entries WHERE id = $1 AND mess_id = $2`,
+        [entryId, messId]
+      );
+      const before = beforeRes.rows[0];
+      if (!before) {
+        throw new HttpError(404, 'NOT_FOUND', 'Ledger entry not found');
+      }
+
+      const newAmount =
+        body.amount !== undefined ? new Decimal(Number(body.amount)).toFixed(2) : before.amount;
+      const newDate = body.date !== undefined ? String(body.date) : before.date;
+      const newNote = body.note !== undefined ? String(body.note).trim() : before.note;
+
+      const updated = await pool.query(
+        `UPDATE mm_ledger_entries
+         SET amount = $1, date = $2, note = $3
+         WHERE id = $4 AND mess_id = $5
+         RETURNING *`,
+        [newAmount, newDate, newNote, entryId, messId]
+      );
+
+      await writeAuditLog({
+        messId,
+        actorId: user.id,
+        action: 'DEPOSIT_EDITED',
+        entity: 'ledger',
+        before: { amount: before.amount, date: before.date, note: before.note },
+        after: { amount: newAmount, date: newDate, note: newNote },
+        reason: `Edited entry from ${before.amount} to ${newAmount}`
+      });
+
+      return NextResponse.json({ data: updated.rows[0] });
+    }
+  }
+
+  // EFFECTIVE-DATED RATES (Meal Rate, Cook Bill, Fuel/Khori Bill)
+  if (resource === 'rates') {
+    if (subSegments.length === 1 && method === 'GET') {
+      const [messRes, histRes] = await Promise.all([
+        pool.query(
+          `SELECT meal_rate, default_cook_bill, default_fuel_bill FROM mm_messes WHERE id = $1`,
+          [messId]
+        ),
+        pool.query(
+          `SELECT r.*, u.name AS actor_name
+           FROM mm_rate_history r
+           LEFT JOIN mm_users u ON u.id = r.created_by
+           WHERE r.mess_id = $1
+           ORDER BY r.effective_from DESC`,
+          [messId]
+        )
+      ]);
+      const messRow = messRes.rows[0];
+      return NextResponse.json({
+        data: {
+          current: {
+            mealRate: Number(messRow?.meal_rate ?? 50).toFixed(2),
+            cookBill: Number(messRow?.default_cook_bill ?? 250).toFixed(2),
+            fuelBill: Number(messRow?.default_fuel_bill ?? 0).toFixed(2)
+          },
+          history: histRes.rows.map((r) => ({
+            id: r.id,
+            effectiveFrom: r.effective_from,
+            mealRate: Number(r.meal_rate).toFixed(2),
+            cookBill: Number(r.cook_bill).toFixed(2),
+            fuelBill: Number(r.fuel_bill).toFixed(2),
+            updatedBy: r.actor_name || null,
+            createdAt: new Date(r.created_at).toISOString()
+          }))
+        }
+      });
+    }
+
+    if (subSegments.length === 1 && method === 'POST') {
+      if (membership.role !== MembershipRole.MANAGER) {
+        throw new HttpError(403, 'FORBIDDEN', 'Only managers can update rates');
+      }
+      const today = getDhakaDateString();
+      const effectiveFrom = String(body.effectiveFrom || today);
+      const mealRate = Number(body.mealRate);
+      const cookBill = Number(body.cookBill);
+      const fuelBill = Number(body.fuelBill);
+
+      if (
+        isNaN(mealRate) ||
+        mealRate < 0 ||
+        isNaN(cookBill) ||
+        cookBill < 0 ||
+        isNaN(fuelBill) ||
+        fuelBill < 0
+      ) {
+        throw new HttpError(400, 'VALIDATION_FAILED', 'Please enter valid non-negative rates');
+      }
+
+      const res = await pool.query(
+        `INSERT INTO mm_rate_history (mess_id, effective_from, meal_rate, cook_bill, fuel_bill, created_by)
+         VALUES ($1, $2, $3, $4, $5, $6)
+         ON CONFLICT (mess_id, effective_from)
+         DO UPDATE SET meal_rate = EXCLUDED.meal_rate, cook_bill = EXCLUDED.cook_bill, fuel_bill = EXCLUDED.fuel_bill, created_by = EXCLUDED.created_by, created_at = NOW()
+         RETURNING *`,
+        [
+          messId,
+          effectiveFrom,
+          mealRate.toFixed(2),
+          cookBill.toFixed(2),
+          fuelBill.toFixed(2),
+          user.id
+        ]
+      );
+
+      // Update mess current active values when effectiveFrom <= today
+      if (effectiveFrom <= today) {
+        await pool.query(
+          `UPDATE mm_messes
+           SET meal_rate = $2, default_cook_bill = $3, default_fuel_bill = $4, updated_at = NOW()
+           WHERE id = $1`,
+          [messId, mealRate.toFixed(2), cookBill.toFixed(2), fuelBill.toFixed(2)]
+        );
+      }
+
+      await writeAuditLog({
+        messId,
+        actorId: user.id,
+        action: 'RATE_UPDATED',
+        entity: 'rates',
+        after: {
+          effectiveFrom,
+          mealRate: mealRate.toFixed(2),
+          cookBill: cookBill.toFixed(2),
+          fuelBill: fuelBill.toFixed(2)
+        },
+        reason: `Rates updated effective from ${effectiveFrom}`
+      });
+
+      return NextResponse.json({ data: res.rows[0] }, { status: 201 });
+    }
   }
 
   // REPORTS
@@ -453,7 +599,7 @@ export async function handleFinanceRoute(
       const maxDay =
         month === today.slice(0, 7) ? Number(today.slice(8, 10)) || daysInMonth : daysInMonth;
 
-      const [messRes, membersRes, defsRes, ovsRes, expensesRes, ledgerRes, closedRes] =
+      const [messRes, membersRes, defsRes, ovsRes, expensesRes, ledgerRes, closedRes, rateRes] =
         await Promise.all([
           pool.query(`SELECT * FROM mm_messes WHERE id = $1`, [messId]),
           pool.query(
@@ -483,12 +629,18 @@ export async function handleFinanceRoute(
           pool.query(`SELECT * FROM mm_closed_months WHERE mess_id = $1 AND month = $2`, [
             messId,
             month
-          ])
+          ]),
+          pool.query(
+            `SELECT effective_from, meal_rate, cook_bill, fuel_bill
+             FROM mm_rate_history WHERE mess_id = $1 ORDER BY effective_from ASC`,
+            [messId]
+          )
         ]);
 
       if (!messRes.rows[0]) throw new HttpError(404, 'NOT_FOUND', 'Mess not found');
       const mess = mapMessRow(messRes.rows[0]);
       const closedRow = closedRes.rows[0];
+      const rateHistory = rateRes.rows as RateHistoryRow[];
 
       const defMap = new Map<string, MealDefaultRow>();
       for (const d of defsRes.rows as MealDefaultRow[]) defMap.set(d.membership_id, d);
@@ -500,30 +652,60 @@ export async function handleFinanceRoute(
 
       let totalMessMeals = new Decimal(0);
       const memberMealsMap = new Map<string, Decimal>();
+      const memberEffectiveMealCostMap = new Map<string, Decimal>();
+      const memberCookBillMap = new Map<string, Decimal>();
+      const memberRateFuelMap = new Map<string, Decimal>();
 
       for (const mem of membersRes.rows) {
         const joinedDate = getDhakaDateString(new Date(mem.joined_at));
         const startDay = joinedDate.startsWith(month) ? Number(joinedDate.slice(8, 10)) || 1 : 1;
         const def = defMap.get(mem.id);
+        const fallback = {
+          mealRate: mess.mealRate,
+          cookBill: mem.cook_bill_amount ?? messRes.rows[0].default_cook_bill ?? 250,
+          fuelBill: messRes.rows[0].default_fuel_bill ?? 0
+        };
+
         let mMeals = new Decimal(0);
-        for (let d = startDay; d <= maxDay; d++) {
+        let mEffectiveMealCost = new Decimal(0);
+        let mCookSum = new Decimal(0);
+        let mFuelSum = new Decimal(0);
+
+        for (let d = 1; d <= daysInMonth; d++) {
           const dateStr = `${month}-${String(d).padStart(2, '0')}`;
-          const lunch = resolveSlot(
-            def,
-            ovMap.get(`${mem.id}:${dateStr}:${SlotType.LUNCH}`),
-            dateStr,
-            SlotType.LUNCH
-          );
-          const dinner = resolveSlot(
-            def,
-            ovMap.get(`${mem.id}:${dateStr}:${SlotType.DINNER}`),
-            dateStr,
-            SlotType.DINNER
-          );
-          if (lunch.status) mMeals = mMeals.plus(0.5 + lunch.guestCount * 0.5);
-          if (dinner.status) mMeals = mMeals.plus(0.5 + dinner.guestCount * 0.5);
+          const dayRate = resolveRateForDate(rateHistory, fallback, dateStr);
+          // Prorate cook & fuel/khori bill per day across the month using the rate active on each day
+          mCookSum = mCookSum.plus(dayRate.cookBill.div(daysInMonth));
+          mFuelSum = mFuelSum.plus(dayRate.fuelBill.div(daysInMonth));
+
+          if (d >= startDay && d <= maxDay) {
+            const lunch = resolveSlot(
+              def,
+              ovMap.get(`${mem.id}:${dateStr}:${SlotType.LUNCH}`),
+              dateStr,
+              SlotType.LUNCH
+            );
+            const dinner = resolveSlot(
+              def,
+              ovMap.get(`${mem.id}:${dateStr}:${SlotType.DINNER}`),
+              dateStr,
+              SlotType.DINNER
+            );
+            let dayUnits = new Decimal(0);
+            if (lunch.status) dayUnits = dayUnits.plus(0.5 + lunch.guestCount * 0.5);
+            if (dinner.status) dayUnits = dayUnits.plus(0.5 + dinner.guestCount * 0.5);
+            mMeals = mMeals.plus(dayUnits);
+            mEffectiveMealCost = mEffectiveMealCost.plus(dayUnits.times(dayRate.mealRate));
+          }
         }
+
         memberMealsMap.set(mem.id, mMeals);
+        memberEffectiveMealCostMap.set(mem.id, mEffectiveMealCost);
+        memberCookBillMap.set(
+          mem.id,
+          rateHistory.length > 0 ? mCookSum : new Decimal(mem.cook_bill_amount)
+        );
+        memberRateFuelMap.set(mem.id, mFuelSum);
         totalMessMeals = totalMessMeals.plus(mMeals);
       }
 
@@ -551,12 +733,18 @@ export async function handleFinanceRoute(
           : new Decimal(mess.mealRate);
 
       const memberCount = Math.max(1, membersRes.rows.length);
-      const perMemberFuel = totalFuelCost.div(memberCount);
+      const perMemberLedgerFuel = totalFuelCost.div(memberCount);
 
       const memberStatements = membersRes.rows.map((mem) => {
         const meals = memberMealsMap.get(mem.id) || new Decimal(0);
-        const mealCost = meals.times(actualMealRate);
-        const cookBill = new Decimal(mem.cook_bill_amount);
+        // If month is closed or actual market expenses exist, use market-based rate; otherwise use effective-dated meal rate history
+        const mealCost =
+          closedRow || totalMarketCost.gt(0)
+            ? meals.times(actualMealRate)
+            : memberEffectiveMealCostMap.get(mem.id) || meals.times(actualMealRate);
+        const cookBill = memberCookBillMap.get(mem.id) || new Decimal(mem.cook_bill_amount);
+        const rateFuel = memberRateFuelMap.get(mem.id) || new Decimal(0);
+        const fuelCost = perMemberLedgerFuel.gt(0) ? perMemberLedgerFuel : rateFuel;
 
         let mDeposits = new Decimal(0);
         let mOtherDebits = new Decimal(0);
@@ -572,7 +760,7 @@ export async function handleFinanceRoute(
           }
         }
 
-        const totalDebits = mealCost.plus(perMemberFuel).plus(cookBill).plus(mOtherDebits);
+        const totalDebits = mealCost.plus(fuelCost).plus(cookBill).plus(mOtherDebits);
         const finalBalance = mDeposits.minus(totalDebits);
 
         return {
@@ -581,7 +769,7 @@ export async function handleFinanceRoute(
           userPhone: mem.u_phone,
           totalMeals: meals.toNumber(),
           mealCost: mealCost.toFixed(2),
-          fuelCost: perMemberFuel.toFixed(2),
+          fuelCost: fuelCost.toFixed(2),
           cookBill: cookBill.toFixed(2),
           otherDebits: mOtherDebits.toFixed(2),
           totalDebits: totalDebits.toFixed(2),

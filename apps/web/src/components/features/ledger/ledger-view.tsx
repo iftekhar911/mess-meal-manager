@@ -48,6 +48,10 @@ export const LedgerView: React.FC<LedgerViewProps> = ({
   const [depositNote, setDepositNote] = useState('');
   const [depositDate, setDepositDate] = useState(getDhakaDateString());
   const [targetDepositMemberId, setTargetDepositMemberId] = useState<string>(membershipId);
+  const [editingEntry, setEditingEntry] = useState<LedgerEntryDto | null>(null);
+  const [editAmount, setEditAmount] = useState<number>(0);
+  const [editDate, setEditDate] = useState<string>(getDhakaDateString());
+  const [editNote, setEditNote] = useState<string>('');
 
   const formatDigit = (val: number | string) => {
     return locale === 'bn' ? toBengaliDigits(val) : String(val);
@@ -112,6 +116,30 @@ export const LedgerView: React.FC<LedgerViewProps> = ({
     onSuccess: () => {
       setIsDepositModalOpen(false);
       setDepositNote('');
+      queryClient.invalidateQueries({ queryKey: ['my-balance'] });
+      queryClient.invalidateQueries({ queryKey: ['ledger-balance'] });
+      queryClient.invalidateQueries({ queryKey: ['ledger-statement'] });
+      queryClient.invalidateQueries({ queryKey: ['month-statement'] });
+      queryClient.invalidateQueries({ queryKey: ['audit-logs', messId] });
+    }
+  });
+
+  const editEntryMutation = useMutation({
+    mutationFn: () =>
+      apiFetch(
+        `/messes/${messId}/ledger/${editingEntry?.id}`,
+        {
+          method: 'PATCH',
+          body: JSON.stringify({
+            amount: editAmount,
+            date: editDate,
+            note: editNote
+          })
+        },
+        token
+      ),
+    onSuccess: () => {
+      setEditingEntry(null);
       queryClient.invalidateQueries({ queryKey: ['my-balance'] });
       queryClient.invalidateQueries({ queryKey: ['ledger-balance'] });
       queryClient.invalidateQueries({ queryKey: ['ledger-statement'] });
@@ -198,6 +226,9 @@ export const LedgerView: React.FC<LedgerViewProps> = ({
                   <th className="py-2.5 px-3 text-left font-semibold">{tCommon('date')}</th>
                   <th className="py-2.5 px-3 text-left font-semibold">{tCommon('description')}</th>
                   <th className="py-2.5 px-3 text-right font-semibold">{tCommon('amount')}</th>
+                  {isManager && (
+                    <th className="py-2.5 px-3 text-right font-semibold">{tCommon('actions')}</th>
+                  )}
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
@@ -230,6 +261,23 @@ export const LedgerView: React.FC<LedgerViewProps> = ({
                         {isCredit ? '+' : '-'}
                         {formatDigit(absFormatted)} {tCommon('bdt')}
                       </td>
+                      {isManager && (
+                        <td className="py-3 px-3 text-right whitespace-nowrap">
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-8 text-xs text-primary px-2"
+                            onClick={() => {
+                              setEditingEntry(entry);
+                              setEditAmount(Number(entry.amount));
+                              setEditDate(entry.date);
+                              setEditNote(entry.note || '');
+                            }}
+                          >
+                            {tCommon('edit')}
+                          </Button>
+                        </td>
+                      )}
                     </tr>
                   );
                 })}
@@ -307,6 +355,47 @@ export const LedgerView: React.FC<LedgerViewProps> = ({
               disabled={depositAmount <= 0}
             >
               {tCommon('confirm')}
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Edit Deposit / Ledger Entry Modal */}
+      <Modal
+        isOpen={Boolean(editingEntry)}
+        onClose={() => setEditingEntry(null)}
+        title={t('editDeposit')}
+      >
+        <div className="space-y-4">
+          <Input
+            label={tCommon('date')}
+            type="date"
+            value={editDate}
+            onChange={(e) => setEditDate(e.target.value)}
+          />
+          <Input
+            label={tCommon('amount')}
+            type="number"
+            step="10"
+            value={editAmount}
+            onChange={(e) => setEditAmount(Number(e.target.value))}
+          />
+          <Input
+            label={tCommon('note')}
+            value={editNote}
+            onChange={(e) => setEditNote(e.target.value)}
+          />
+          <div className="flex justify-end gap-2 pt-3 border-t border-border">
+            <Button variant="secondary" size="sm" onClick={() => setEditingEntry(null)}>
+              {tCommon('cancel')}
+            </Button>
+            <Button
+              size="sm"
+              isLoading={editEntryMutation.isPending}
+              onClick={() => editEntryMutation.mutate()}
+              disabled={editAmount === 0}
+            >
+              {tCommon('save')}
             </Button>
           </div>
         </div>

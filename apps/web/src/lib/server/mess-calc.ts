@@ -101,8 +101,46 @@ export function mapMessRow(row: Record<string, unknown>): MessDto {
   };
 }
 
+export interface RateHistoryRow {
+  effective_from: string;
+  meal_rate: string | number;
+  cook_bill: string | number;
+  fuel_bill: string | number;
+}
+
 /**
- * Evaluates a member's real-time balance from ledger entries and resolved meals in the current month.
+ * Resolves the active mealRate, cookBill, and fuelBill for a specific date YYYY-MM-DD.
+ * Uses the latest rate history row whose effective_from <= dateStr.
+ */
+export function resolveRateForDate(
+  history: RateHistoryRow[],
+  fallback: { mealRate: string | number; cookBill: string | number; fuelBill: string | number },
+  dateStr: string
+): { mealRate: Decimal; cookBill: Decimal; fuelBill: Decimal } {
+  let matched: RateHistoryRow | undefined;
+  for (const row of history) {
+    if (row.effective_from <= dateStr) {
+      if (!matched || row.effective_from > matched.effective_from) {
+        matched = row;
+      }
+    }
+  }
+  if (matched) {
+    return {
+      mealRate: new Decimal(matched.meal_rate),
+      cookBill: new Decimal(matched.cook_bill),
+      fuelBill: new Decimal(matched.fuel_bill)
+    };
+  }
+  return {
+    mealRate: new Decimal(fallback.mealRate),
+    cookBill: new Decimal(fallback.cookBill),
+    fuelBill: new Decimal(fallback.fuelBill)
+  };
+}
+
+/**
+ * Evaluates a member's real-time balance from ledger entries and effective-dated meal rates.
  */
 export async function evaluateMemberBalance(
   mess: MessDto,
@@ -113,7 +151,7 @@ export async function evaluateMemberBalance(
   const currentMonth = today.slice(0, 7);
   const currentDay = Number(today.slice(8, 10)) || 1;
 
-  const [ledgerRes, defRes, ovRes, memRes] = await Promise.all([
+  const [ledgerRes, defRes, ovRes, memRes, rateRes] = await Promise.all([
     pool.query(`SELECT type, amount FROM mm_ledger_entries WHERE membership_id = $1`, [
       membershipId
     ]),
@@ -122,7 +160,14 @@ export async function evaluateMemberBalance(
       membershipId,
       `${currentMonth}-%`
     ]),
-    pool.query(`SELECT joined_at FROM mm_memberships WHERE id = $1`, [membershipId])
+    pool.query(`SELECT joined_at, cook_bill_amount FROM mm_memberships WHERE id = $1`, [
+      membershipId
+    ]),
+    pool.query(
+      `SELECT effective_from, meal_rate, cook_bill, fuel_bill
+       FROM mm_rate_history WHERE mess_id = $1 ORDER BY effective_from ASC`,
+      [mess.id]
+    )
   ]);
 
   let deposits = new Decimal(0);
@@ -135,14 +180,12 @@ export async function evaluateMemberBalance(
     } else if (row.type === LedgerType.REFUND) {
       deposits = deposits.plus(amt);
     } else if (row.type === LedgerType.ADJUSTMENT) {
-      // Negative adjustment reduces balance, positive adjustment increases balance
       deposits = deposits.plus(amt);
     } else {
       otherDebits = otherDebits.plus(amt.abs());
     }
   }
 
-  // Count meals taken from member's join day (or day 1 of current month) up to today
   const joinedAtDate = memRes.rows[0]?.joined_at
     ? getDhakaDateString(new Date(memRes.rows[0].joined_at))
     : `${currentMonth}-01`;
@@ -156,7 +199,14 @@ export async function evaluateMemberBalance(
     ovMap.set(`${ov.date}:${ov.slot}`, ov);
   }
 
-  let mealUnits = new Decimal(0);
+  const rateHistory = rateRes.rows as RateHistoryRow[];
+  const fallbackRates = {
+    mealRate: mess.mealRate,
+    cookBill: memRes.rows[0]?.cook_bill_amount ?? 250,
+    fuelBill: 0
+  };
+
+  let estimatedMealCost = new Decimal(0);
   for (let d = startDay; d <= currentDay; d++) {
     const dateStr = `${currentMonth}-${String(d).padStart(2, '0')}`;
     const lunch = resolveSlot(
@@ -171,14 +221,19 @@ export async function evaluateMemberBalance(
       dateStr,
       SlotType.DINNER
     );
-    if (lunch.status) mealUnits = mealUnits.plus(0.5 + lunch.guestCount * 0.5);
-    if (dinner.status) mealUnits = mealUnits.plus(0.5 + dinner.guestCount * 0.5);
+    let dayUnits = new Decimal(0);
+    if (lunch.status) dayUnits = dayUnits.plus(0.5 + lunch.guestCount * 0.5);
+    if (dinner.status) dayUnits = dayUnits.plus(0.5 + dinner.guestCount * 0.5);
+
+    if (dayUnits.gt(0)) {
+      const dayRate = resolveRateForDate(rateHistory, fallbackRates, dateStr);
+      estimatedMealCost = estimatedMealCost.plus(dayUnits.times(dayRate.mealRate));
+    }
   }
 
-  const mealRate = new Decimal(mess.mealRate);
-  const estimatedMealCost = mealUnits.times(mealRate);
+  const todayRate = resolveRateForDate(rateHistory, fallbackRates, today);
   const currentBalance = deposits.minus(otherDebits).minus(estimatedMealCost);
-  const dailyEstimatedCost = mealRate.gt(0) ? mealRate : new Decimal(50);
+  const dailyEstimatedCost = todayRate.mealRate.gt(0) ? todayRate.mealRate : new Decimal(50);
   const daysRemaining = dailyEstimatedCost.gt(0)
     ? currentBalance.div(dailyEstimatedCost).floor().toNumber()
     : 0;

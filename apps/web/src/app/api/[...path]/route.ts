@@ -50,7 +50,12 @@ async function dispatch(
       const subSegments = segments.slice(2);
       const resource = subSegments[0];
 
-      if (resource === 'members' || resource === 'notices' || resource === 'audit') {
+      if (
+        resource === 'members' ||
+        resource === 'notices' ||
+        resource === 'audit' ||
+        resource === 'join-requests'
+      ) {
         return await handleMessSubRoute(req, messId, subSegments, body);
       }
 
@@ -62,7 +67,8 @@ async function dispatch(
         resource === 'roster' ||
         resource === 'expenses' ||
         resource === 'ledger' ||
-        resource === 'reports'
+        resource === 'reports' ||
+        resource === 'rates'
       ) {
         return await handleFinanceRoute(req, messId, subSegments, body);
       }

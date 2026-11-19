@@ -5,10 +5,11 @@ import {
   MealType,
   MembershipDto,
   MembershipRole,
-  NoticeDto
+  NoticeDto,
+  getDhakaDateString
 } from '@mess/shared';
 import { getPool } from '../db';
-import { HttpError, normalizePhone, requireAuth, requireMembership } from '../auth';
+import { HttpError, getAuthUser, normalizePhone, requireAuth, requireMembership } from '../auth';
 import { mapMessRow, writeAuditLog } from '../mess-calc';
 
 /**
@@ -20,8 +21,51 @@ export async function handleMessRootRoute(
   body: Record<string, unknown>
 ): Promise<NextResponse> {
   const pool = getPool();
-  const user = await requireAuth(req);
   const method = req.method.toUpperCase();
+
+  // Public + Authenticated Mess Directory Grid
+  if (segments.length === 2 && segments[1] === 'directory' && method === 'GET') {
+    const optionalUser = await getAuthUser(req);
+    const res = await pool.query(
+      `SELECT m.*,
+              COUNT(mem.id) FILTER (WHERE mem.is_active = TRUE) AS member_count,
+              MAX(u.name) FILTER (WHERE mem.role = 'MANAGER' AND mem.is_active = TRUE) AS manager_name
+       FROM mm_messes m
+       LEFT JOIN mm_memberships mem ON mem.mess_id = m.id
+       LEFT JOIN mm_users u ON u.id = mem.user_id
+       GROUP BY m.id
+       ORDER BY m.created_at DESC`
+    );
+
+    const memberSet = new Set<string>();
+    const reqMap = new Map<string, string>();
+
+    if (optionalUser) {
+      const [myMems, myReqs] = await Promise.all([
+        pool.query(`SELECT mess_id FROM mm_memberships WHERE user_id = $1 AND is_active = TRUE`, [
+          optionalUser.id
+        ]),
+        pool.query(`SELECT mess_id, status FROM mm_join_requests WHERE user_id = $1`, [
+          optionalUser.id
+        ])
+      ]);
+      for (const r of myMems.rows) memberSet.add(r.mess_id);
+      for (const r of myReqs.rows) reqMap.set(r.mess_id, r.status);
+    }
+
+    const items = res.rows.map((r) => ({
+      ...mapMessRow(r),
+      memberCount: Number(r.member_count || 0),
+      managerName: r.manager_name || null,
+      cookBill: Number(r.default_cook_bill ?? 250).toFixed(2),
+      fuelBill: Number(r.default_fuel_bill ?? 0).toFixed(2),
+      joinStatus: memberSet.has(r.id) ? 'MEMBER' : reqMap.get(r.id) || 'NONE'
+    }));
+
+    return NextResponse.json({ data: items });
+  }
+
+  const user = await requireAuth(req);
 
   if (segments.length === 2 && segments[1] === 'my' && method === 'GET') {
     const res = await pool.query(
@@ -69,6 +113,13 @@ export async function handleMessRootRoute(
       `INSERT INTO mm_meal_defaults (membership_id, meal_type, half_slot, egg_preference, is_active)
        VALUES ($1, $2, NULL, $3, TRUE)`,
       [memId, MealType.FULL, EggPreference.NONE]
+    );
+
+    await pool.query(
+      `INSERT INTO mm_rate_history (mess_id, effective_from, meal_rate, cook_bill, fuel_bill, created_by)
+       VALUES ($1, $2, $3, 250.00, 0.00, $4)
+       ON CONFLICT (mess_id, effective_from) DO NOTHING`,
+      [mess.id, getDhakaDateString(), mess.mealRate, user.id]
     );
 
     return NextResponse.json({ data: mess }, { status: 201 });
@@ -343,6 +394,123 @@ export async function handleMessSubRoute(
       });
 
       return NextResponse.json({ data: { success: true } });
+    }
+  }
+
+  // JOIN REQUESTS (Boarder applies, Manager approves/rejects)
+  if (resource === 'join-requests') {
+    if (subSegments.length === 1 && method === 'POST') {
+      const existingMem = await pool.query(
+        `SELECT id FROM mm_memberships WHERE user_id = $1 AND mess_id = $2 AND is_active = TRUE`,
+        [user.id, messId]
+      );
+      if (existingMem.rows[0]) {
+        throw new HttpError(409, 'ALREADY_MEMBER', 'You are already a member of this mess');
+      }
+      const note = body.note ? String(body.note).trim() : null;
+      const res = await pool.query(
+        `INSERT INTO mm_join_requests (user_id, mess_id, status, note, updated_at)
+         VALUES ($1, $2, 'PENDING', $3, NOW())
+         ON CONFLICT (user_id, mess_id)
+         DO UPDATE SET status = 'PENDING', note = EXCLUDED.note, updated_at = NOW()
+         RETURNING *`,
+        [user.id, messId, note]
+      );
+      return NextResponse.json({ data: res.rows[0] }, { status: 201 });
+    }
+
+    if (subSegments.length === 1 && method === 'GET') {
+      await requireMembership(user.id, messId, true);
+      const res = await pool.query(
+        `SELECT jr.*, u.name AS u_name, u.phone AS u_phone
+         FROM mm_join_requests jr
+         INNER JOIN mm_users u ON u.id = jr.user_id
+         WHERE jr.mess_id = $1 AND jr.status = 'PENDING'
+         ORDER BY jr.created_at ASC`,
+        [messId]
+      );
+      const list = res.rows.map((r) => ({
+        id: r.id,
+        userId: r.user_id,
+        messId: r.mess_id,
+        userName: r.u_name,
+        userPhone: r.u_phone,
+        status: r.status,
+        note: r.note || null,
+        createdAt: new Date(r.created_at).toISOString()
+      }));
+      return NextResponse.json({ data: list });
+    }
+
+    if (subSegments.length === 3 && method === 'POST') {
+      await requireMembership(user.id, messId, true);
+      const reqId = subSegments[1]!;
+      const decision = subSegments[2];
+
+      const jrRes = await pool.query(
+        `SELECT jr.*, u.name AS u_name, u.phone AS u_phone
+         FROM mm_join_requests jr
+         INNER JOIN mm_users u ON u.id = jr.user_id
+         WHERE jr.id = $1 AND jr.mess_id = $2`,
+        [reqId, messId]
+      );
+      const jr = jrRes.rows[0];
+      if (!jr) throw new HttpError(404, 'NOT_FOUND', 'Join request not found');
+
+      if (decision === 'approve') {
+        await pool.query(
+          `UPDATE mm_join_requests SET status = 'APPROVED', reviewed_by = $2, updated_at = NOW() WHERE id = $1`,
+          [reqId, user.id]
+        );
+
+        const messRes = await pool.query(`SELECT default_cook_bill FROM mm_messes WHERE id = $1`, [
+          messId
+        ]);
+        const cookBill = Number(messRes.rows[0]?.default_cook_bill ?? 250).toFixed(2);
+
+        const memRes = await pool.query(
+          `INSERT INTO mm_memberships (user_id, mess_id, role, is_active, cook_bill_amount)
+           VALUES ($1, $2, $3, TRUE, $4)
+           ON CONFLICT (user_id, mess_id)
+           DO UPDATE SET is_active = TRUE, updated_at = NOW()
+           RETURNING id`,
+          [jr.user_id, messId, MembershipRole.BOARDER, cookBill]
+        );
+
+        await pool.query(
+          `INSERT INTO mm_meal_defaults (membership_id, meal_type, half_slot, egg_preference, is_active)
+           VALUES ($1, $2, NULL, $3, TRUE)
+           ON CONFLICT (membership_id) DO NOTHING`,
+          [memRes.rows[0].id, MealType.FULL, EggPreference.NONE]
+        );
+
+        await writeAuditLog({
+          messId,
+          actorId: user.id,
+          action: 'JOIN_REQUEST_APPROVED',
+          entity: 'memberships',
+          after: { name: jr.u_name, phone: jr.u_phone },
+          reason: `Approved join request from ${jr.u_name}`
+        });
+
+        return NextResponse.json({ data: { success: true, status: 'APPROVED' } });
+      }
+
+      if (decision === 'reject') {
+        await pool.query(
+          `UPDATE mm_join_requests SET status = 'REJECTED', reviewed_by = $2, updated_at = NOW() WHERE id = $1`,
+          [reqId, user.id]
+        );
+        await writeAuditLog({
+          messId,
+          actorId: user.id,
+          action: 'JOIN_REQUEST_REJECTED',
+          entity: 'memberships',
+          after: { name: jr.u_name, phone: jr.u_phone },
+          reason: `Rejected join request from ${jr.u_name}`
+        });
+        return NextResponse.json({ data: { success: true, status: 'REJECTED' } });
+      }
     }
   }
 

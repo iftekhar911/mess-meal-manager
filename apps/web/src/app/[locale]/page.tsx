@@ -41,6 +41,7 @@ import { ShoppingExpenses } from '@/components/features/expenses/shopping-expens
 import { MonthStatementView } from '@/components/features/reports/month-statement-view';
 import { AuditLogViewer } from '@/components/features/audit/audit-log-viewer';
 import { ManagerPanel } from '@/components/features/manager/manager-panel';
+import { MessDirectoryGrid } from '@/components/features/mess-directory/mess-directory-grid';
 
 type PrimaryTab = 'home' | 'meals' | 'shopping' | 'accounts' | 'more';
 
@@ -69,7 +70,9 @@ export default function HomePage() {
   const [activeTab, setActiveTab] = useState<PrimaryTab>('home');
   const [mealsSubTab, setMealsSubTab] = useState<'prefs' | 'grid'>('prefs');
   const [accountsSubTab, setAccountsSubTab] = useState<'ledger' | 'reports'>('ledger');
-  const [moreSubTab, setMoreSubTab] = useState<'notices' | 'audit' | 'manager'>('notices');
+  const [moreSubTab, setMoreSubTab] = useState<'notices' | 'audit' | 'directory' | 'manager'>(
+    'notices'
+  );
   const [isCreateMessOpen, setIsCreateMessOpen] = useState(false);
 
   const formatDigit = (val: number | string) =>
@@ -302,6 +305,10 @@ export default function HomePage() {
               </p>
             </Card>
           </div>
+
+          <div className="pt-6 border-t border-border">
+            <MessDirectoryGrid isLoggedIn={false} />
+          </div>
         </div>
       </div>
     );
@@ -426,44 +433,36 @@ export default function HomePage() {
         {isMessesLoading ? (
           <p className="text-center text-sm text-text-secondary py-12">{tCommon('loading')}</p>
         ) : !messes || messes.length === 0 ? (
-          /* Zero-Fake-Data Onboarding */
-          <div className="max-w-2xl mx-auto space-y-6 py-4">
-            <div className="text-center space-y-2">
-              <h1 className="text-2xl sm:text-3xl font-extrabold text-text-primary">
-                {tOnboard('welcome')}, {user.name}
-              </h1>
-              <p className="text-sm sm:text-base text-text-secondary">{tOnboard('subtitle')}</p>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <Card className="p-6 flex flex-col justify-between gap-4">
-                <div className="space-y-2">
-                  <h2 className="text-lg font-bold text-text-primary">{tOnboard('createTitle')}</h2>
-                  <p className="text-sm text-text-secondary leading-relaxed">
-                    {tOnboard('createDesc')}
-                  </p>
-                </div>
-                <Button className="w-full" onClick={() => setIsCreateMessOpen(true)}>
-                  + {tMess('createButton')}
-                </Button>
-              </Card>
-
-              <Card className="p-6 flex flex-col justify-between gap-4">
-                <div className="space-y-2">
-                  <h2 className="text-lg font-bold text-text-primary">{tOnboard('joinTitle')}</h2>
-                  <p className="text-sm text-text-secondary leading-relaxed">
-                    {tOnboard('joinDesc')}
-                  </p>
-                  <div className="p-3 rounded-token bg-surface-elevated border border-border text-center">
-                    <span className="text-xs text-text-muted block">{tOnboard('yourPhone')}</span>
-                    <span className="text-lg font-extrabold text-primary">{user.phone}</span>
-                  </div>
-                </div>
-                <Button variant="secondary" className="w-full" onClick={() => refetchMesses()}>
+          /* First-Page Mess Directory Grid + Create Mess Onboarding */
+          <div className="max-w-5xl mx-auto space-y-6 py-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-border">
+              <div>
+                <h1 className="text-2xl sm:text-3xl font-extrabold text-text-primary">
+                  {tOnboard('welcome')}, {user.name}
+                </h1>
+                <p className="text-sm sm:text-base text-text-secondary mt-1">
+                  {tOnboard('subtitle')}
+                </p>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <Button variant="secondary" size="sm" onClick={() => refetchMesses()}>
                   {tCommon('refresh')}
                 </Button>
-              </Card>
+                <Button size="sm" onClick={() => setIsCreateMessOpen(true)}>
+                  + {tMess('createButton')}
+                </Button>
+              </div>
             </div>
+
+            <MessDirectoryGrid
+              token={token}
+              isLoggedIn={true}
+              onSelectMess={(id) => {
+                setActiveMessId(id);
+                refetchMesses();
+              }}
+              onCreateNew={() => setIsCreateMessOpen(true)}
+            />
           </div>
         ) : (
           <>
@@ -775,6 +774,13 @@ export default function HomePage() {
                     >
                       {tNav('audit')}
                     </Button>
+                    <Button
+                      size="sm"
+                      variant={moreSubTab === 'directory' ? 'primary' : 'secondary'}
+                      onClick={() => setMoreSubTab('directory')}
+                    >
+                      {tOnboard('browseMesses')}
+                    </Button>
                     {isManager && (
                       <Button
                         size="sm"
@@ -801,6 +807,18 @@ export default function HomePage() {
 
                 {moreSubTab === 'audit' && (
                   <AuditLogViewer messId={currentMess.id} token={token || undefined} />
+                )}
+
+                {moreSubTab === 'directory' && (
+                  <MessDirectoryGrid
+                    token={token}
+                    isLoggedIn={true}
+                    onSelectMess={(id) => {
+                      setActiveMessId(id);
+                      setActiveTab('home');
+                    }}
+                    onCreateNew={() => setIsCreateMessOpen(true)}
+                  />
                 )}
 
                 {moreSubTab === 'manager' && (
