@@ -145,6 +145,10 @@
   "shopper": {
     "summaryTitle": "Today's Shopping Summary",
     "todayMenu": "Today's Menu",
+    "lunchMenu": "Lunch Menu",
+    "dinnerMenu": "Dinner Menu",
+    "lunchMenuPlaceholder": "e.g., Rui fish curry, dal and vegetables",
+    "dinnerMenuPlaceholder": "e.g., Chicken curry, bhorta and dal",
     "menuPlaceholder": "e.g., Rui fish curry, dal and vegetables",
     "protein": "Main Protein",
     "proteinFish": "Fish",

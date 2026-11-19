@@ -563,13 +563,49 @@ export default function HomePage() {
                       <span className="text-xs font-semibold text-text-secondary">
                         {tShopper('todayMenu')}
                       </span>
-                      <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-primary-surface text-primary">
-                        {getProteinLabel(shopperSummary?.menu?.protein)}
-                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setActiveTab('shopping')}
+                        className="text-xs font-bold text-primary hover:underline cursor-pointer"
+                      >
+                        {tNav('shopping')} &rarr;
+                      </button>
                     </div>
-                    <p className="text-base font-bold text-text-primary">
-                      {shopperSummary?.menu?.note || tShopper('noMenuSet')}
-                    </p>
+
+                    <div className="space-y-2">
+                      <div className="p-2.5 rounded-token bg-surface-elevated/60 border border-border">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-xs font-bold text-text-secondary">
+                            {tShopper('lunchMenu')}
+                          </span>
+                          <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-primary-surface text-primary">
+                            {getProteinLabel(
+                              shopperSummary?.menu?.lunchProtein || shopperSummary?.menu?.protein
+                            )}
+                          </span>
+                        </div>
+                        <p className="text-sm font-semibold text-text-primary mt-0.5">
+                          {shopperSummary?.menu?.lunchNote ||
+                            shopperSummary?.menu?.note ||
+                            tShopper('noMenuSet')}
+                        </p>
+                      </div>
+
+                      <div className="p-2.5 rounded-token bg-surface-elevated/60 border border-border">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-xs font-bold text-text-secondary">
+                            {tShopper('dinnerMenu')}
+                          </span>
+                          <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-primary-surface text-primary">
+                            {getProteinLabel(shopperSummary?.menu?.dinnerProtein)}
+                          </span>
+                        </div>
+                        <p className="text-sm font-semibold text-text-primary mt-0.5">
+                          {shopperSummary?.menu?.dinnerNote || tShopper('noMenuSet')}
+                        </p>
+                      </div>
+                    </div>
+
                     <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-border text-xs text-text-secondary">
                       <span>
                         {tShopper('dutyShopper')}:{' '}

@@ -126,6 +126,10 @@ export interface DailyMenuDto {
   shopperId: string | null;
   protein: ProteinType;
   note: string | null;
+  lunchProtein?: ProteinType;
+  lunchNote?: string | null;
+  dinnerProtein?: ProteinType;
+  dinnerNote?: string | null;
 }
 
 /**

@@ -99,9 +99,18 @@ export async function ensureSchema(): Promise<void> {
       shopper_id UUID REFERENCES mm_memberships(id) ON DELETE SET NULL,
       protein TEXT NOT NULL DEFAULT 'OTHER',
       note TEXT,
+      lunch_protein TEXT NOT NULL DEFAULT 'OTHER',
+      lunch_note TEXT,
+      dinner_protein TEXT NOT NULL DEFAULT 'OTHER',
+      dinner_note TEXT,
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       UNIQUE (mess_id, date)
     );
+
+    ALTER TABLE mm_daily_menus ADD COLUMN IF NOT EXISTS lunch_protein TEXT NOT NULL DEFAULT 'OTHER';
+    ALTER TABLE mm_daily_menus ADD COLUMN IF NOT EXISTS lunch_note TEXT;
+    ALTER TABLE mm_daily_menus ADD COLUMN IF NOT EXISTS dinner_protein TEXT NOT NULL DEFAULT 'OTHER';
+    ALTER TABLE mm_daily_menus ADD COLUMN IF NOT EXISTS dinner_note TEXT;
 
     CREATE TABLE IF NOT EXISTS mm_shopping_roster (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

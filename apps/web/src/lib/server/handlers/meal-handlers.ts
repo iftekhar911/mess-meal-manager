@@ -34,11 +34,19 @@ export async function handleMealRoute(
   const method = req.method.toUpperCase();
   const resource = subSegments[0];
 
-  // MENUS
+  // MENUS (Lunch + Dinner)
   if (resource === 'menus' && method === 'POST') {
     const date = String(body.date || getDhakaDateString());
-    const protein = (body.protein as ProteinType) || ProteinType.OTHER;
-    const note = body.note !== undefined ? String(body.note).trim() : null;
+    const lunchProtein =
+      (body.lunchProtein as ProteinType) || (body.protein as ProteinType) || ProteinType.OTHER;
+    const lunchNote =
+      body.lunchNote !== undefined
+        ? String(body.lunchNote).trim()
+        : body.note !== undefined
+          ? String(body.note).trim()
+          : null;
+    const dinnerProtein = (body.dinnerProtein as ProteinType) || ProteinType.OTHER;
+    const dinnerNote = body.dinnerNote !== undefined ? String(body.dinnerNote).trim() : null;
 
     // Allow managers or assigned shopper for that date
     if (membership.role !== MembershipRole.MANAGER) {
@@ -52,12 +60,20 @@ export async function handleMealRoute(
     }
 
     const res = await pool.query(
-      `INSERT INTO mm_daily_menus (mess_id, date, shopper_id, protein, note, updated_at)
-       VALUES ($1, $2, $3, $4, $5, NOW())
+      `INSERT INTO mm_daily_menus (mess_id, date, shopper_id, protein, note, lunch_protein, lunch_note, dinner_protein, dinner_note, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $4, $5, $6, $7, NOW())
        ON CONFLICT (mess_id, date)
-       DO UPDATE SET protein = EXCLUDED.protein, note = EXCLUDED.note, shopper_id = EXCLUDED.shopper_id, updated_at = NOW()
+       DO UPDATE SET
+         protein = EXCLUDED.lunch_protein,
+         note = EXCLUDED.lunch_note,
+         lunch_protein = EXCLUDED.lunch_protein,
+         lunch_note = EXCLUDED.lunch_note,
+         dinner_protein = EXCLUDED.dinner_protein,
+         dinner_note = EXCLUDED.dinner_note,
+         shopper_id = EXCLUDED.shopper_id,
+         updated_at = NOW()
        RETURNING *`,
-      [messId, date, membership.id, protein, note]
+      [messId, date, membership.id, lunchProtein, lunchNote, dinnerProtein, dinnerNote]
     );
 
     const row = res.rows[0];
@@ -67,8 +83,12 @@ export async function handleMealRoute(
         messId: row.mess_id,
         date: row.date,
         shopperId: row.shopper_id,
-        protein: row.protein,
-        note: row.note
+        protein: row.lunch_protein || row.protein,
+        note: row.lunch_note ?? row.note,
+        lunchProtein: row.lunch_protein || row.protein,
+        lunchNote: row.lunch_note ?? row.note,
+        dinnerProtein: row.dinner_protein || ProteinType.OTHER,
+        dinnerNote: row.dinner_note ?? null
       }
     });
   }
@@ -322,7 +342,9 @@ export async function handleMealRoute(
     }
     const mess = mapMessRow(messRes.rows[0]);
     const menuRow = menuRes.rows[0];
-    const todayProtein = (menuRow?.protein as ProteinType) || ProteinType.OTHER;
+    const lunchProtein =
+      ((menuRow?.lunch_protein || menuRow?.protein) as ProteinType) || ProteinType.OTHER;
+    const dinnerProtein = (menuRow?.dinner_protein as ProteinType) || ProteinType.OTHER;
 
     const defMap = new Map<string, MealDefaultRow>();
     for (const d of defsRes.rows as MealDefaultRow[]) defMap.set(d.membership_id, d);
@@ -335,9 +357,9 @@ export async function handleMealRoute(
     let guestCount = 0;
     let eggCount = 0;
 
-    const wantsEgg = (pref: EggPreference): boolean => {
-      if (pref === EggPreference.INSTEAD_OF_FISH && todayProtein === ProteinType.FISH) return true;
-      if (pref === EggPreference.INSTEAD_OF_CHICKEN && todayProtein === ProteinType.CHICKEN)
+    const wantsEgg = (pref: EggPreference, slotProtein: ProteinType): boolean => {
+      if (pref === EggPreference.INSTEAD_OF_FISH && slotProtein === ProteinType.FISH) return true;
+      if (pref === EggPreference.INSTEAD_OF_CHICKEN && slotProtein === ProteinType.CHICKEN)
         return true;
       return false;
     };
@@ -350,12 +372,12 @@ export async function handleMealRoute(
       if (l.status) {
         lunchMeals += 1 + l.guestCount;
         guestCount += l.guestCount;
-        if (wantsEgg(l.eggPreference)) eggCount += 1;
+        if (wantsEgg(l.eggPreference, lunchProtein)) eggCount += 1;
       }
       if (dn.status) {
         dinnerMeals += 1 + dn.guestCount;
         guestCount += dn.guestCount;
-        if (wantsEgg(dn.eggPreference)) eggCount += 1;
+        if (wantsEgg(dn.eggPreference, dinnerProtein)) eggCount += 1;
       }
     }
 
@@ -377,8 +399,12 @@ export async function handleMealRoute(
             messId: menuRow.mess_id,
             date: menuRow.date,
             shopperId: menuRow.shopper_id,
-            protein: menuRow.protein as ProteinType,
-            note: menuRow.note
+            protein: lunchProtein,
+            note: menuRow.lunch_note ?? menuRow.note ?? null,
+            lunchProtein,
+            lunchNote: menuRow.lunch_note ?? menuRow.note ?? null,
+            dinnerProtein,
+            dinnerNote: menuRow.dinner_note ?? null
           }
         : null
     };

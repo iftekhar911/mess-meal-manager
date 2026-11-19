@@ -145,6 +145,10 @@
   "shopper": {
     "summaryTitle": "আজকের বাজার সারাংশ",
     "todayMenu": "আজকের মেন্যু",
+    "lunchMenu": "দুপুরের মেন্যু",
+    "dinnerMenu": "রাতের মেন্যু",
+    "lunchMenuPlaceholder": "যেমন: রুই মাছ, ডাল ও সবজি",
+    "dinnerMenuPlaceholder": "যেমন: মুরগির মাংস, ভর্তা ও ডাল",
     "menuPlaceholder": "যেমন: রুই মাছ, ডাল ও সবজি",
     "protein": "প্রধান খাবার",
     "proteinFish": "মাছ",
