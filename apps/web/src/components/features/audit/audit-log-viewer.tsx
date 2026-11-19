@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { useTranslations } from 'next-intl';
+import { useTranslations, useLocale } from 'next-intl';
 import { useQuery } from '@tanstack/react-query';
 import { AuditLogDto } from '@mess/shared';
 import { Card } from '../../ui/card';
@@ -12,82 +12,91 @@ export interface AuditLogViewerProps {
   token?: string;
 }
 
+type EnrichedAuditLog = AuditLogDto & { actorName?: string };
+
+const KNOWN_ACTIONS = [
+  'MEMBER_ADDED',
+  'MEMBER_UPDATED',
+  'MEMBER_REMOVED',
+  'DEPOSIT_RECORDED',
+  'LEDGER_ADJUSTMENT',
+  'FORCE_OVERRIDE',
+  'EXPENSE_APPROVED',
+  'EXPENSE_REJECTED',
+  'FUEL_EXPENSE_RECORDED',
+  'MESS_SETTINGS_UPDATED',
+  'MONTH_CLOSED'
+] as const;
+
 /**
- * Transparent audit log viewer showing manager exceptions, overrides,
- * liability records, and reversing entries.
+ * Clean, human-readable audit log timeline for mess transparency.
  */
 export const AuditLogViewer: React.FC<AuditLogViewerProps> = ({ messId, token }) => {
   const t = useTranslations('audit');
   const tCommon = useTranslations('common');
+  const locale = useLocale();
 
-  const { data: logs, isLoading } = useQuery<AuditLogDto[]>({
+  const { data: logs, isLoading } = useQuery<EnrichedAuditLog[]>({
     queryKey: ['audit-logs', messId],
-    queryFn: () => apiFetch<AuditLogDto[]>(`/messes/${messId}/audit`, {}, token),
+    queryFn: () => apiFetch<EnrichedAuditLog[]>(`/messes/${messId}/audit`, {}, token),
     enabled: !!messId
   });
 
-  if (isLoading) {
-    return <p className="text-sm text-text-secondary">{tCommon('loading')}</p>;
-  }
+  const formatTime = (iso: string) => {
+    try {
+      return new Intl.DateTimeFormat(locale === 'bn' ? 'bn-BD' : 'en-US', {
+        dateStyle: 'medium',
+        timeStyle: 'short',
+        timeZone: 'Asia/Dhaka'
+      }).format(new Date(iso));
+    } catch {
+      return iso.slice(0, 16);
+    }
+  };
+
+  const getActionLabel = (action: string) => {
+    if ((KNOWN_ACTIONS as readonly string[]).includes(action)) {
+      return t(`actions.${action}`);
+    }
+    return action.replace(/_/g, ' ').toLowerCase();
+  };
 
   return (
-    <div className="space-y-4">
-      <div>
-        <h2 className="text-xl font-bold text-text-primary">{t('title')}</h2>
-        <p className="text-xs text-text-secondary">{t('subtitle')}</p>
+    <Card className="space-y-4">
+      <div className="pb-2 border-b border-border">
+        <h3 className="font-bold text-base sm:text-lg text-text-primary">{t('title')}</h3>
+        <p className="text-xs text-text-muted mt-0.5">{t('subtitle')}</p>
       </div>
 
-      {!logs || logs.length === 0 ? (
-        <Card className="text-center py-8 text-text-secondary text-sm">{t('noLogs')}</Card>
+      {isLoading ? (
+        <p className="text-sm text-text-secondary py-6 text-center">{tCommon('loading')}</p>
+      ) : !logs || logs.length === 0 ? (
+        <p className="text-sm text-text-muted py-8 text-center">{t('noLogs')}</p>
       ) : (
-        <div className="space-y-3">
+        <div className="divide-y divide-border">
           {logs.map((log) => (
-            <Card key={log.id} className="space-y-2">
-              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border pb-2">
-                <div className="flex items-center gap-2">
-                  <span className="font-semibold text-sm bg-primary/10 text-primary px-2.5 py-1 rounded-token border border-primary/20">
-                    {log.action}
+            <div
+              key={log.id}
+              className="py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2"
+            >
+              <div className="space-y-0.5">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-primary-surface text-primary border border-primary/20">
+                    {getActionLabel(log.action)}
                   </span>
-                  <span className="text-xs text-text-muted">({log.entity})</span>
+                  {log.actorName && (
+                    <span className="text-xs font-semibold text-text-primary">{log.actorName}</span>
+                  )}
                 </div>
-                <span className="text-xs text-text-muted">
-                  {new Date(log.createdAt).toLocaleString()}
-                </span>
+                {log.reason && <p className="text-sm text-text-secondary">{log.reason}</p>}
               </div>
-
-              {log.reason && (
-                <div className="text-sm bg-surface-elevated p-2.5 rounded-token border border-border">
-                  <span className="font-medium text-text-primary block text-xs mb-1">
-                    {t('reason')}:
-                  </span>
-                  <p className="text-text-secondary text-xs">{log.reason}</p>
-                </div>
-              )}
-
-              {(log.before || log.after) && (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs pt-1">
-                  {log.before && (
-                    <div className="p-2 bg-surface-elevated rounded-token border border-border">
-                      <span className="font-semibold text-text-muted block mb-1">Before:</span>
-                      <pre className="text-text-secondary overflow-x-auto whitespace-pre-wrap font-mono">
-                        {JSON.stringify(log.before, null, 2)}
-                      </pre>
-                    </div>
-                  )}
-                  {log.after && (
-                    <div className="p-2 bg-surface-elevated rounded-token border border-border">
-                      <span className="font-semibold text-text-muted block mb-1">After:</span>
-                      <pre className="text-text-secondary overflow-x-auto whitespace-pre-wrap font-mono">
-                        {JSON.stringify(log.after, null, 2)}
-                      </pre>
-                    </div>
-                  )}
-                </div>
-              )}
-            </Card>
+              <span className="text-xs text-text-muted whitespace-nowrap">
+                {formatTime(log.createdAt)}
+              </span>
+            </div>
           ))}
         </div>
       )}
-    </div>
+    </Card>
   );
 };

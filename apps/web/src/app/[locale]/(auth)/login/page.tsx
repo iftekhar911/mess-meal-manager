@@ -23,9 +23,11 @@ export default function LoginPage() {
   const {
     register,
     handleSubmit,
-    formState: { errors, isSubmitting }
+    formState: { errors, isSubmitting, isSubmitted }
   } = useForm<LoginInput>({
     resolver: zodResolver(LoginSchema),
+    mode: 'onSubmit',
+    reValidateMode: 'onChange',
     defaultValues: {
       phone: '',
       password: ''
@@ -43,6 +45,10 @@ export default function LoginPage() {
       router.push('/');
     } catch (err: unknown) {
       if (err instanceof ApiClientError) {
+        setServerError(
+          err.errorCode === 'INVALID_CREDENTIALS' ? t('invalidCredentials') : err.message
+        );
+      } else if (err instanceof Error) {
         setServerError(err.message);
       } else {
         setServerError(tCommon('error'));
@@ -52,14 +58,16 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-screen flex flex-col justify-center items-center p-4 bg-background">
-      <div className="absolute top-4 right-4">
+      <div className="fixed top-4 right-4 z-10">
         <LanguageSwitcher />
       </div>
 
-      <div className="w-full max-w-md">
-        {/* Logo and Brand Header */}
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-primary-surface text-primary border border-primary/20 shadow-xs mb-3">
+      <div className="w-full max-w-md space-y-6">
+        <div className="text-center">
+          <Link
+            href="/"
+            className="inline-flex items-center justify-center w-14 h-14 rounded-token bg-primary text-white shadow-sm mb-3"
+          >
             <svg
               className="w-7 h-7"
               fill="none"
@@ -73,26 +81,30 @@ export default function LoginPage() {
                 d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"
               />
             </svg>
-          </div>
+          </Link>
           <h1 className="text-2xl font-bold text-text-primary">{tCommon('appName')}</h1>
           <p className="text-sm text-text-secondary mt-1">{t('loginSubtitle')}</p>
         </div>
 
         <Card className="p-6 sm:p-8">
-          <h2 className="text-xl font-bold text-text-primary mb-6">{t('loginTitle')}</h2>
+          <h2 className="text-xl font-bold text-text-primary mb-5">{t('loginTitle')}</h2>
 
           {serverError && (
-            <div className="p-3.5 mb-5 rounded-token bg-danger-surface border border-danger/30 text-sm text-danger font-medium">
+            <div
+              role="alert"
+              className="p-3.5 mb-5 rounded-token bg-danger-surface border border-danger/30 text-sm text-danger font-medium"
+            >
               {serverError}
             </div>
           )}
 
-          <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+          <form onSubmit={handleSubmit(onSubmit)} noValidate className="space-y-4">
             <Input
               label={t('phoneLabel')}
               placeholder={t('phonePlaceholder')}
               type="tel"
-              error={errors.phone?.message}
+              autoComplete="tel"
+              error={isSubmitted ? errors.phone?.message : undefined}
               {...register('phone')}
             />
 
@@ -100,7 +112,8 @@ export default function LoginPage() {
               label={t('passwordLabel')}
               placeholder={t('passwordPlaceholder')}
               type="password"
-              error={errors.password?.message}
+              autoComplete="current-password"
+              error={isSubmitted ? errors.password?.message : undefined}
               {...register('password')}
             />
 
@@ -112,7 +125,7 @@ export default function LoginPage() {
           <div className="mt-6 pt-5 border-t border-border text-center">
             <Link
               href="/register"
-              className="text-sm font-medium text-primary hover:text-primary-hover hover:underline transition-colors"
+              className="text-sm font-medium text-primary hover:text-primary-hover hover:underline"
             >
               {t('noAccount')}
             </Link>

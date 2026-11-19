@@ -10,21 +10,26 @@ import {
   CreateMessInput,
   MessDto,
   MembershipDto,
+  MembershipRole,
+  NoticeDto,
+  ProteinType,
   ShopperDailySummaryDto,
+  ShoppingRosterDto,
+  SlotType,
+  EggPreference,
   BalanceStatus,
   BalanceEvaluationDto,
   toBengaliDigits,
   getDhakaDateString
 } from '@mess/shared';
+import { Link } from '@/i18n/routing';
 import { useAuth } from '@/lib/auth-context';
 import { apiFetch } from '@/lib/api-client';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Modal } from '@/components/ui/modal';
-import { Avatar } from '@/components/ui/avatar';
 import { StatusDot } from '@/components/ui/status-dot';
-import { PageHeader } from '@/components/ui/page-header';
 import { LanguageSwitcher } from '@/components/ui/language-switcher';
 import { MealHeatmap, HeatmapRow } from '@/components/features/meal-heatmap/meal-heatmap';
 import { ShopperSummary } from '@/components/features/shopper-summary/shopper-summary';
@@ -36,17 +41,20 @@ import { ShoppingExpenses } from '@/components/features/expenses/shopping-expens
 import { MonthStatementView } from '@/components/features/reports/month-statement-view';
 import { AuditLogViewer } from '@/components/features/audit/audit-log-viewer';
 import { ManagerPanel } from '@/components/features/manager/manager-panel';
-import { Tabs } from '@/components/ui/tabs';
-import { useRouter } from '@/i18n/routing';
+
+type PrimaryTab = 'home' | 'meals' | 'shopping' | 'accounts' | 'more';
 
 export default function HomePage() {
   const tCommon = useTranslations('common');
   const tNav = useTranslations('nav');
+  const tLanding = useTranslations('landing');
+  const tOnboard = useTranslations('onboarding');
   const tMess = useTranslations('messes');
   const tMeals = useTranslations('meals');
+  const tShopper = useTranslations('shopper');
+  const tLedger = useTranslations('ledger');
   const tAuth = useTranslations('auth');
   const locale = useLocale();
-  const router = useRouter();
   const queryClient = useQueryClient();
 
   const {
@@ -58,17 +66,24 @@ export default function HomePage() {
     isLoading: isAuthLoading
   } = useAuth();
 
-  const [activeTab, setActiveTab] = useState<
-    'meals' | 'heatmap' | 'shopper' | 'ledger' | 'reports' | 'notices' | 'audit' | 'manager'
-  >('meals');
+  const [activeTab, setActiveTab] = useState<PrimaryTab>('home');
+  const [mealsSubTab, setMealsSubTab] = useState<'prefs' | 'grid'>('prefs');
+  const [accountsSubTab, setAccountsSubTab] = useState<'ledger' | 'reports'>('ledger');
+  const [moreSubTab, setMoreSubTab] = useState<'notices' | 'audit' | 'manager'>('notices');
   const [isCreateMessOpen, setIsCreateMessOpen] = useState(false);
 
-  const formatDigit = (val: number | string) => {
-    return locale === 'bn' ? toBengaliDigits(val) : String(val);
-  };
+  const formatDigit = (val: number | string) =>
+    locale === 'bn' ? toBengaliDigits(val) : String(val);
 
-  // Fetch messes for user
-  const { data: messes, isLoading: isMessesLoading } = useQuery<MessDto[]>({
+  const todayStr = getDhakaDateString();
+  const currentMonth = todayStr.slice(0, 7);
+
+  // 1. User's messes
+  const {
+    data: messes,
+    isLoading: isMessesLoading,
+    refetch: refetchMesses
+  } = useQuery<MessDto[]>({
     queryKey: ['my-messes', token],
     queryFn: () => apiFetch<MessDto[]>('/messes/my', {}, token || undefined),
     enabled: !!token
@@ -76,7 +91,7 @@ export default function HomePage() {
 
   const currentMess = messes?.find((m) => m.id === activeMessId) || messes?.[0];
 
-  // Fetch user's membership in active mess
+  // 2. Members of active mess
   const { data: members } = useQuery<MembershipDto[]>({
     queryKey: ['mess-members', currentMess?.id],
     queryFn: () =>
@@ -84,11 +99,10 @@ export default function HomePage() {
     enabled: !!currentMess?.id
   });
 
-  const currentMembership = members?.find((m) => m.userId === user?.id) || members?.[0];
-  const isManager = currentMembership?.role === 'MANAGER';
+  const currentMembership = members?.find((m) => m.userId === user?.id);
+  const isManager = currentMembership?.role === MembershipRole.MANAGER;
 
-  // Fetch heatmap for active mess
-  const currentMonth = getDhakaDateString().slice(0, 7);
+  // 3. Heatmap
   const { data: heatmapData } = useQuery<{
     month: string;
     daysInMonth: number;
@@ -101,11 +115,10 @@ export default function HomePage() {
         {},
         token || undefined
       ),
-    enabled: !!currentMess?.id && (activeTab === 'heatmap' || activeTab === 'meals')
+    enabled: !!currentMess?.id
   });
 
-  // Fetch shopper summary
-  const todayStr = getDhakaDateString();
+  // 4. Today's shopper summary
   const { data: shopperSummary } = useQuery<ShopperDailySummaryDto>({
     queryKey: ['shopper-summary', currentMess?.id, todayStr],
     queryFn: () =>
@@ -117,7 +130,19 @@ export default function HomePage() {
     enabled: !!currentMess?.id
   });
 
-  // Fetch real-time balance for user
+  // 5. Roster for today's shopper display
+  const { data: rosterData } = useQuery<ShoppingRosterDto[]>({
+    queryKey: ['roster', currentMess?.id, currentMonth],
+    queryFn: () =>
+      apiFetch<ShoppingRosterDto[]>(
+        `/messes/${currentMess?.id}/roster?month=${currentMonth}`,
+        {},
+        token || undefined
+      ),
+    enabled: !!currentMess?.id
+  });
+
+  // 6. Real-time balance
   const { data: myBalance } = useQuery<BalanceEvaluationDto>({
     queryKey: ['my-balance', currentMess?.id, currentMembership?.id],
     queryFn: () =>
@@ -127,6 +152,38 @@ export default function HomePage() {
         token || undefined
       ),
     enabled: !!currentMess?.id && !!currentMembership?.id
+  });
+
+  // 7. Latest notices
+  const { data: notices } = useQuery<NoticeDto[]>({
+    queryKey: ['notices', currentMess?.id],
+    queryFn: () =>
+      apiFetch<NoticeDto[]>(`/messes/${currentMess?.id}/notices`, {}, token || undefined),
+    enabled: !!currentMess?.id
+  });
+
+  // Quick one-tap toggle for Today's Lunch or Dinner right on Home
+  const quickSlotMutation = useMutation({
+    mutationFn: ({ slot, status }: { slot: SlotType; status: boolean }) =>
+      apiFetch(
+        `/messes/${currentMess?.id}/meals/override/${currentMembership?.id}`,
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            date: todayStr,
+            slot,
+            status,
+            eggPreference: EggPreference.NONE,
+            guestCount: 0
+          })
+        },
+        token || undefined
+      ),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['heatmap'] });
+      queryClient.invalidateQueries({ queryKey: ['shopper-summary'] });
+      queryClient.invalidateQueries({ queryKey: ['my-balance'] });
+    }
   });
 
   const {
@@ -151,10 +208,7 @@ export default function HomePage() {
     mutationFn: (newMess: CreateMessInput) =>
       apiFetch<MessDto>(
         '/messes',
-        {
-          method: 'POST',
-          body: JSON.stringify(newMess)
-        },
+        { method: 'POST', body: JSON.stringify(newMess) },
         token || undefined
       ),
     onSuccess: (savedMess) => {
@@ -165,102 +219,126 @@ export default function HomePage() {
     }
   });
 
+  const getProteinLabel = (protein?: ProteinType) => {
+    if (protein === ProteinType.FISH) return tShopper('proteinFish');
+    if (protein === ProteinType.CHICKEN) return tShopper('proteinChicken');
+    return tShopper('proteinOther');
+  };
+
   // Loading state
   if (isAuthLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="flex flex-col items-center gap-2">
-          <div className="w-10 h-10 border-3 border-primary/20 border-t-primary rounded-full animate-spin" />
-          <p className="text-sm font-medium text-text-secondary mt-2">{tCommon('loading')}</p>
+          <div className="w-9 h-9 border-2 border-primary/20 border-t-primary rounded-full animate-spin" />
+          <p className="text-sm font-medium text-text-secondary mt-1">{tCommon('loading')}</p>
         </div>
       </div>
     );
   }
 
-  // Unauthenticated Welcome Portal
+  // Unauthenticated Landing Page
   if (!user) {
     return (
-      <div className="min-h-screen flex flex-col justify-center items-center p-4 bg-background">
-        <div className="absolute top-4 right-4">
+      <div className="min-h-screen flex flex-col justify-center items-center px-4 py-12 bg-background">
+        <div className="fixed top-4 right-4 z-10">
           <LanguageSwitcher />
         </div>
 
-        <div className="w-full max-w-lg text-center space-y-6">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-primary-surface text-primary border border-primary/20 shadow-xs">
-            <svg
-              className="w-8 h-8"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-              strokeWidth="2"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"
-              />
-            </svg>
-          </div>
-
-          <div>
-            <h1 className="text-3xl font-extrabold text-text-primary">{tCommon('appName')}</h1>
-            <p className="text-base text-text-secondary mt-2 leading-relaxed">
-              {tAuth('loginSubtitle')}
+        <div className="w-full max-w-2xl space-y-8">
+          <div className="text-center space-y-4">
+            <div className="inline-flex items-center justify-center w-16 h-16 rounded-token bg-primary text-white shadow-sm">
+              <svg
+                className="w-8 h-8"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+                strokeWidth="2"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"
+                />
+              </svg>
+            </div>
+            <h1 className="text-3xl sm:text-4xl font-extrabold text-text-primary">
+              {tCommon('appName')}
+            </h1>
+            <p className="text-base sm:text-lg text-text-secondary max-w-lg mx-auto leading-relaxed">
+              {tCommon('tagline')}
             </p>
+            <div className="flex flex-col sm:flex-row justify-center gap-3 pt-2 max-w-sm mx-auto">
+              <Link href="/login" className="flex-1">
+                <Button size="lg" className="w-full font-bold">
+                  {tAuth('loginButton')}
+                </Button>
+              </Link>
+              <Link href="/register" className="flex-1">
+                <Button variant="secondary" size="lg" className="w-full font-semibold">
+                  {tAuth('registerButton')}
+                </Button>
+              </Link>
+            </div>
           </div>
 
-          <Card className="p-6 space-y-4 card-shadow">
-            <Button
-              onClick={() => router.push('/login')}
-              size="lg"
-              className="w-full font-bold shadow-sm"
-            >
-              {tAuth('loginButton')}
-            </Button>
-            <Button
-              onClick={() => router.push('/register')}
-              variant="secondary"
-              size="lg"
-              className="w-full font-semibold"
-            >
-              {tAuth('registerButton')}
-            </Button>
-          </Card>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-4">
+            <Card className="p-5 space-y-2">
+              <h2 className="font-bold text-base text-text-primary">{tLanding('feature1Title')}</h2>
+              <p className="text-sm text-text-secondary leading-relaxed">
+                {tLanding('feature1Desc')}
+              </p>
+            </Card>
+            <Card className="p-5 space-y-2">
+              <h2 className="font-bold text-base text-text-primary">{tLanding('feature2Title')}</h2>
+              <p className="text-sm text-text-secondary leading-relaxed">
+                {tLanding('feature2Desc')}
+              </p>
+            </Card>
+            <Card className="p-5 space-y-2">
+              <h2 className="font-bold text-base text-text-primary">{tLanding('feature3Title')}</h2>
+              <p className="text-sm text-text-secondary leading-relaxed">
+                {tLanding('feature3Desc')}
+              </p>
+            </Card>
+          </div>
         </div>
       </div>
     );
   }
 
-  // Today's meal row for current user in heatmap
-  const userHeatmapRow = heatmapData?.rows?.find(
-    (r) =>
-      (r?.member?.id || (r as unknown as { membershipId?: string })?.membershipId) ===
-      currentMembership?.id
-  );
+  const userHeatmapRow = heatmapData?.rows?.find((r) => r?.member?.id === currentMembership?.id);
   const todayCell = userHeatmapRow?.days?.[todayStr];
+  const isLunchOn = todayCell?.lunch ?? true;
+  const isDinnerOn = todayCell?.dinner ?? true;
+  const todayShoppers = (rosterData || []).filter((r) => r.date === todayStr);
+  const isTodayShopper = todayShoppers.some((s) => s.membershipId === currentMembership?.id);
+  const latestNotice = notices?.[0];
+
+  const navItems: { key: PrimaryTab; label: string }[] = [
+    { key: 'home', label: tNav('home') },
+    { key: 'meals', label: tNav('meals') },
+    { key: 'shopping', label: tNav('shopping') },
+    { key: 'accounts', label: tNav('accounts') },
+    { key: 'more', label: tNav('more') }
+  ];
 
   return (
-    <div className="min-h-screen bg-background text-text-primary">
-      {/* Top Header */}
-      <header className="border-b border-border bg-surface/90 backdrop-blur-md px-4 py-3 sticky top-0 z-30 shadow-xs">
-        <div className="max-w-7xl mx-auto flex items-center justify-between gap-3">
-          {/* Brand & Mess Switcher */}
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-2">
-              <span className="w-8 h-8 rounded-xl bg-primary text-white flex items-center justify-center font-bold text-sm shadow-xs">
-                M
-              </span>
-              <span className="font-extrabold text-base sm:text-lg text-text-primary hidden sm:inline">
-                {tCommon('appName')}
-              </span>
-            </div>
+    <div className="min-h-screen bg-background text-text-primary pb-20 md:pb-8">
+      {/* Compact Responsive Top Bar (Zero Overflow on 375px) */}
+      <header className="border-b border-border bg-surface/95 backdrop-blur-md px-3 sm:px-4 py-2.5 sticky top-0 z-30">
+        <div className="max-w-6xl mx-auto flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="w-8 h-8 shrink-0 rounded-token bg-primary text-white flex items-center justify-center font-bold text-sm">
+              M
+            </span>
 
             {messes && messes.length > 1 ? (
               <select
                 value={currentMess?.id || ''}
                 onChange={(e) => setActiveMessId(e.target.value)}
                 aria-label={tMess('selectMess')}
-                className="text-xs font-semibold bg-surface-elevated text-text-primary border border-border px-2.5 py-1.5 rounded-token focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer shadow-2xs"
+                className="text-xs sm:text-sm font-bold bg-surface-elevated text-text-primary border border-border px-2.5 py-1.5 rounded-token max-w-[130px] sm:max-w-[200px] truncate cursor-pointer"
               >
                 {messes.map((m) => (
                   <option key={m.id} value={m.id}>
@@ -269,20 +347,25 @@ export default function HomePage() {
                 ))}
               </select>
             ) : currentMess ? (
-              <span className="text-xs font-semibold bg-surface-elevated text-text-secondary border border-border px-2.5 py-1 rounded-token">
+              <span className="text-xs sm:text-sm font-bold text-text-primary truncate max-w-[130px] sm:max-w-[220px]">
                 {currentMess.name}
               </span>
-            ) : null}
+            ) : (
+              <span className="text-sm font-bold text-text-primary truncate">
+                {tCommon('appName')}
+              </span>
+            )}
           </div>
 
-          {/* Right Action Icons & Profile */}
-          <div className="flex items-center gap-2 sm:gap-3">
-            {/* Live Balance Pill */}
+          <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
             {myBalance && (
-              <div
-                onClick={() => setActiveTab('ledger')}
-                className="flex items-center gap-1.5 bg-surface-elevated/80 border border-border px-2.5 py-1 rounded-full text-xs font-bold cursor-pointer hover:border-primary/50 transition-colors"
-                title={`${tNav('ledger')}: ${myBalance.currentBalance} ${tCommon('bdt')}`}
+              <button
+                type="button"
+                onClick={() => {
+                  setActiveTab('accounts');
+                  setAccountsSubTab('ledger');
+                }}
+                className="flex items-center gap-1.5 bg-surface-elevated border border-border px-2.5 py-1 rounded-full text-xs font-bold cursor-pointer hover:border-primary/50"
               >
                 <StatusDot
                   status={
@@ -293,186 +376,297 @@ export default function HomePage() {
                         : 'danger'
                   }
                 />
-                <span className="font-extrabold text-text-primary">
-                  {formatDigit(myBalance.currentBalance)} {tCommon('bdt')}
-                </span>
-              </div>
-            )}
-
-            {isManager && (
-              <Button
-                variant={activeTab === 'manager' ? 'primary' : 'secondary'}
-                size="sm"
-                onClick={() => setActiveTab('manager')}
-                className="hidden md:inline-flex text-xs font-semibold"
-              >
-                {tNav('manager')}
-              </Button>
+                <span>{formatDigit(myBalance.currentBalance)}</span>
+              </button>
             )}
 
             <LanguageSwitcher />
 
-            <div className="flex items-center gap-2 pl-1 border-l border-border">
-              <Avatar
-                name={user.name}
-                avatarUrl={user.avatarUrl}
-                size="sm"
-                status={myBalance?.status}
-              />
-              <span className="text-xs font-semibold text-text-secondary hidden lg:inline max-w-[120px] truncate">
-                {user.name}
-              </span>
-              <Button variant="ghost" size="sm" onClick={() => logout()} className="text-xs px-2">
-                {tCommon('logout')}
-              </Button>
-            </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => logout()}
+              className="text-xs px-2 h-8 sm:h-9"
+            >
+              {tCommon('logout')}
+            </Button>
           </div>
         </div>
       </header>
 
-      {/* Main Content Area */}
-      <main className="max-w-7xl mx-auto p-4 sm:p-6 space-y-5">
-        {/* Page Title & New Mess Action */}
-        <PageHeader
-          title={currentMess ? currentMess.name : tMess('selectMess')}
-          subtitle={
-            currentMess ? `${tMess('cutoffTime')}: ${currentMess.cutoffTime}` : tMess('createMess')
-          }
-          action={
-            <Button onClick={() => setIsCreateMessOpen(true)} size="sm">
+      {/* Desktop Top Navigation Bar */}
+      {currentMess && (
+        <nav className="hidden md:block border-b border-border bg-surface">
+          <div className="max-w-6xl mx-auto px-4 flex items-center justify-between">
+            <div className="flex items-center gap-1">
+              {navItems.map((item) => (
+                <button
+                  key={item.key}
+                  type="button"
+                  onClick={() => setActiveTab(item.key)}
+                  className={`px-4 py-3 text-sm font-semibold border-b-2 transition-colors cursor-pointer ${
+                    activeTab === item.key
+                      ? 'border-primary text-primary'
+                      : 'border-transparent text-text-secondary hover:text-text-primary'
+                  }`}
+                >
+                  {item.label}
+                </button>
+              ))}
+            </div>
+            <Button size="sm" variant="secondary" onClick={() => setIsCreateMessOpen(true)}>
               + {tMess('createMess')}
             </Button>
-          }
-        />
-
-        {/* Today at a Glance Summary Bar */}
-        {currentMess && (
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            {/* Card 1: Today Dhaka Date */}
-            <Card className="p-3.5 card-shadow flex items-center justify-between">
-              <div>
-                <span className="text-2xs text-text-muted font-bold block">{tCommon('today')}</span>
-                <span className="text-sm font-extrabold text-text-primary mt-0.5 block">
-                  {todayStr}
-                </span>
-              </div>
-              <span className="w-8 h-8 rounded-lg bg-surface-elevated text-primary flex items-center justify-center font-bold text-xs">
-                CAL
-              </span>
-            </Card>
-
-            {/* Card 2: My Meal Status */}
-            <Card className="p-3.5 card-shadow flex items-center justify-between">
-              <div>
-                <span className="text-2xs text-text-muted font-bold block">
-                  {tMeals('todayMealStatus')}
-                </span>
-                <div className="flex items-center gap-2 mt-0.5">
-                  <span
-                    className={`text-xs px-2 py-0.5 rounded-full font-bold ${
-                      todayCell?.lunch ? 'bg-success/15 text-success' : 'bg-border text-text-muted'
-                    }`}
-                  >
-                    {tMeals('lunch')}: {todayCell?.lunch ? tMeals('on') : tMeals('off')}
-                  </span>
-                  <span
-                    className={`text-xs px-2 py-0.5 rounded-full font-bold ${
-                      todayCell?.dinner ? 'bg-success/15 text-success' : 'bg-border text-text-muted'
-                    }`}
-                  >
-                    {tMeals('dinner')}: {todayCell?.dinner ? tMeals('on') : tMeals('off')}
-                  </span>
-                </div>
-              </div>
-            </Card>
-
-            {/* Card 3: Today Menu Protein */}
-            <Card className="p-3.5 card-shadow flex items-center justify-between">
-              <div>
-                <span className="text-2xs text-text-muted font-bold block">
-                  {shopperSummary?.menu?.protein || 'Menu'}
-                </span>
-                <span className="text-sm font-extrabold text-text-primary mt-0.5 block truncate max-w-[150px]">
-                  {shopperSummary?.menu?.note || 'Regular Meal'}
-                </span>
-              </div>
-              <span className="text-xs px-2 py-1 rounded-md bg-warning/10 text-warning font-bold">
-                {shopperSummary?.eggCount ?? 0} {tMeals('eggPreference')}
-              </span>
-            </Card>
-
-            {/* Card 4: Mess Cutoff Time */}
-            <Card className="p-3.5 card-shadow flex items-center justify-between">
-              <div>
-                <span className="text-2xs text-text-muted font-bold block">
-                  {tMess('cutoffTime')}
-                </span>
-                <span className="text-sm font-extrabold text-danger mt-0.5 block">
-                  {currentMess.cutoffTime}
-                </span>
-              </div>
-              <span className="text-2xs text-text-muted px-2 py-1 rounded-md bg-surface-elevated font-semibold">
-                Dhaka
-              </span>
-            </Card>
           </div>
-        )}
+        </nav>
+      )}
 
+      {/* Main Content */}
+      <main className="max-w-6xl mx-auto px-3 sm:px-4 py-4 sm:py-6 space-y-5">
         {isMessesLoading ? (
-          <p className="text-text-secondary text-center py-10">{tCommon('loading')}</p>
+          <p className="text-center text-sm text-text-secondary py-12">{tCommon('loading')}</p>
         ) : !messes || messes.length === 0 ? (
-          <Card className="text-center py-14 card-shadow space-y-4">
-            <h3 className="text-xl font-bold text-text-primary">{tMess('selectMess')}</h3>
-            <p className="text-sm text-text-secondary max-w-md mx-auto">{tMess('createMess')}</p>
-            <Button onClick={() => setIsCreateMessOpen(true)} size="md">
-              {tMess('createButton')}
-            </Button>
-          </Card>
+          /* Zero-Fake-Data Onboarding */
+          <div className="max-w-2xl mx-auto space-y-6 py-4">
+            <div className="text-center space-y-2">
+              <h1 className="text-2xl sm:text-3xl font-extrabold text-text-primary">
+                {tOnboard('welcome')}, {user.name}
+              </h1>
+              <p className="text-sm sm:text-base text-text-secondary">{tOnboard('subtitle')}</p>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <Card className="p-6 flex flex-col justify-between gap-4">
+                <div className="space-y-2">
+                  <h2 className="text-lg font-bold text-text-primary">{tOnboard('createTitle')}</h2>
+                  <p className="text-sm text-text-secondary leading-relaxed">
+                    {tOnboard('createDesc')}
+                  </p>
+                </div>
+                <Button className="w-full" onClick={() => setIsCreateMessOpen(true)}>
+                  + {tMess('createButton')}
+                </Button>
+              </Card>
+
+              <Card className="p-6 flex flex-col justify-between gap-4">
+                <div className="space-y-2">
+                  <h2 className="text-lg font-bold text-text-primary">{tOnboard('joinTitle')}</h2>
+                  <p className="text-sm text-text-secondary leading-relaxed">
+                    {tOnboard('joinDesc')}
+                  </p>
+                  <div className="p-3 rounded-token bg-surface-elevated border border-border text-center">
+                    <span className="text-xs text-text-muted block">{tOnboard('yourPhone')}</span>
+                    <span className="text-lg font-extrabold text-primary">{user.phone}</span>
+                  </div>
+                </div>
+                <Button variant="secondary" className="w-full" onClick={() => refetchMesses()}>
+                  {tCommon('refresh')}
+                </Button>
+              </Card>
+            </div>
+          </div>
         ) : (
           <>
-            {/* Feature Navigation Tabs */}
-            <Tabs
-              activeKey={activeTab}
-              onChange={(key) => setActiveTab(key as typeof activeTab)}
-              items={[
-                { key: 'meals', label: tNav('meals') },
-                { key: 'heatmap', label: tNav('heatmap') },
-                { key: 'shopper', label: tNav('shopping') },
-                { key: 'ledger', label: tNav('ledger') },
-                { key: 'reports', label: tNav('reports') },
-                { key: 'notices', label: tNav('notices') },
-                { key: 'audit', label: tNav('audit') },
-                ...(isManager ? [{ key: 'manager', label: tNav('manager') }] : [])
-              ]}
-            />
+            {/* TAB 1: HOME (TODAY AT A GLANCE) */}
+            {activeTab === 'home' && currentMess && currentMembership && (
+              <div className="space-y-4">
+                {/* Today's Meal Hero Card */}
+                <Card className="p-5 sm:p-6 space-y-4 border-primary/25">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <h2 className="text-lg sm:text-xl font-extrabold text-text-primary">
+                        {tMeals('todayMealStatus')}
+                      </h2>
+                      <p className="text-xs text-text-secondary mt-0.5">
+                        {tMeals('quickToggleHint')}
+                      </p>
+                    </div>
+                    <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-surface-elevated border border-border text-text-secondary">
+                      {todayStr}
+                    </span>
+                  </div>
 
-            {/* Tab Views */}
+                  <div className="grid grid-cols-2 gap-3">
+                    <button
+                      type="button"
+                      disabled={quickSlotMutation.isPending}
+                      onClick={() =>
+                        quickSlotMutation.mutate({ slot: SlotType.LUNCH, status: !isLunchOn })
+                      }
+                      className={`p-4 rounded-token border-2 text-left transition-all cursor-pointer ${
+                        isLunchOn
+                          ? 'border-success bg-success-surface text-success'
+                          : 'border-border bg-surface-elevated/60 text-text-secondary'
+                      }`}
+                    >
+                      <span className="text-xs font-semibold block">{tMeals('lunch')}</span>
+                      <span className="text-2xl font-extrabold mt-1 block">
+                        {isLunchOn ? tMeals('on') : tMeals('off')}
+                      </span>
+                    </button>
+
+                    <button
+                      type="button"
+                      disabled={quickSlotMutation.isPending}
+                      onClick={() =>
+                        quickSlotMutation.mutate({ slot: SlotType.DINNER, status: !isDinnerOn })
+                      }
+                      className={`p-4 rounded-token border-2 text-left transition-all cursor-pointer ${
+                        isDinnerOn
+                          ? 'border-success bg-success-surface text-success'
+                          : 'border-border bg-surface-elevated/60 text-text-secondary'
+                      }`}
+                    >
+                      <span className="text-xs font-semibold block">{tMeals('dinner')}</span>
+                      <span className="text-2xl font-extrabold mt-1 block">
+                        {isDinnerOn ? tMeals('on') : tMeals('off')}
+                      </span>
+                    </button>
+                  </div>
+                </Card>
+
+                {/* Balance + Menu Grid */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <Card className="p-5 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-semibold text-text-secondary">
+                        {tLedger('balance')}
+                      </span>
+                      <span className="text-xs font-semibold text-text-muted">
+                        {tMess('cutoffTime')}: {currentMess.cutoffTime}
+                      </span>
+                    </div>
+                    <div className="flex items-baseline gap-2">
+                      <span className="text-3xl font-extrabold text-text-primary">
+                        {formatDigit(myBalance?.currentBalance || '0.00')}
+                      </span>
+                      <span className="text-sm font-semibold text-text-muted">
+                        {tCommon('bdt')}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between pt-2 border-t border-border text-xs">
+                      <span className="text-text-secondary font-medium">
+                        {tLedger('daysLeft')}: {formatDigit(myBalance?.daysRemaining ?? 0)}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setActiveTab('accounts')}
+                        className="font-bold text-primary hover:underline cursor-pointer"
+                      >
+                        {tNav('ledger')} &rarr;
+                      </button>
+                    </div>
+                  </Card>
+
+                  <Card className="p-5 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-semibold text-text-secondary">
+                        {tShopper('todayMenu')}
+                      </span>
+                      <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-primary-surface text-primary">
+                        {getProteinLabel(shopperSummary?.menu?.protein)}
+                      </span>
+                    </div>
+                    <p className="text-base font-bold text-text-primary">
+                      {shopperSummary?.menu?.note || tShopper('noMenuSet')}
+                    </p>
+                    <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-border text-xs text-text-secondary">
+                      <span>
+                        {tShopper('dutyShopper')}:{' '}
+                        <strong className="text-text-primary">
+                          {todayShoppers.length > 0
+                            ? todayShoppers.map((s) => s.member?.user?.name).join(', ')
+                            : tShopper('noShopperAssigned')}
+                        </strong>
+                      </span>
+                      <span>
+                        {tShopper('eggTotal')}:{' '}
+                        <strong className="text-warning">
+                          {formatDigit(shopperSummary?.eggCount ?? 0)}
+                        </strong>
+                      </span>
+                    </div>
+                  </Card>
+                </div>
+
+                {/* Latest Notice Preview */}
+                {latestNotice && (
+                  <Card className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-primary-surface/40 border-primary/20">
+                    <div>
+                      <span className="text-xs font-bold text-primary block">
+                        {tNav('notices')}
+                      </span>
+                      <h3 className="font-bold text-sm text-text-primary mt-0.5">
+                        {latestNotice.title}
+                      </h3>
+                      <p className="text-xs text-text-secondary mt-0.5 line-clamp-2">
+                        {latestNotice.body}
+                      </p>
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      onClick={() => {
+                        setActiveTab('more');
+                        setMoreSubTab('notices');
+                      }}
+                    >
+                      {tCommon('all')}
+                    </Button>
+                  </Card>
+                )}
+              </div>
+            )}
+
+            {/* TAB 2: MEALS (PREFERENCES + MONTHLY GRID) */}
             {activeTab === 'meals' && currentMess && currentMembership && (
-              <MealPreferences
-                messId={currentMess.id}
-                membershipId={currentMembership.id}
-                token={token || undefined}
-              />
+              <div className="space-y-4">
+                <div className="flex gap-2">
+                  <Button
+                    size="sm"
+                    variant={mealsSubTab === 'prefs' ? 'primary' : 'secondary'}
+                    onClick={() => setMealsSubTab('prefs')}
+                  >
+                    {tMeals('title')}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant={mealsSubTab === 'grid' ? 'primary' : 'secondary'}
+                    onClick={() => setMealsSubTab('grid')}
+                  >
+                    {tNav('heatmap')}
+                  </Button>
+                </div>
+
+                {mealsSubTab === 'prefs' ? (
+                  <MealPreferences
+                    messId={currentMess.id}
+                    membershipId={currentMembership.id}
+                    token={token || undefined}
+                  />
+                ) : heatmapData ? (
+                  <MealHeatmap
+                    month={heatmapData.month}
+                    daysInMonth={heatmapData.daysInMonth}
+                    rows={heatmapData.rows}
+                  />
+                ) : (
+                  <p className="text-sm text-text-secondary py-6 text-center">
+                    {tCommon('loading')}
+                  </p>
+                )}
+              </div>
             )}
 
-            {activeTab === 'heatmap' && heatmapData && (
-              <MealHeatmap
-                month={heatmapData.month}
-                daysInMonth={heatmapData.daysInMonth}
-                rows={heatmapData.rows}
-              />
-            )}
-
-            {activeTab === 'shopper' && currentMess && currentMembership && (
-              <div className="space-y-6">
-                {shopperSummary ? (
+            {/* TAB 3: SHOPPING */}
+            {activeTab === 'shopping' && currentMess && currentMembership && (
+              <div className="space-y-5">
+                {shopperSummary && (
                   <ShopperSummary
                     summary={shopperSummary}
                     token={token || undefined}
-                    isShopperOrManager={isManager}
+                    isShopperOrManager={isManager || isTodayShopper}
                   />
-                ) : (
-                  <p className="text-sm text-text-secondary">{tCommon('loading')}</p>
                 )}
                 <RosterCalendar
                   messId={currentMess.id}
@@ -489,41 +683,98 @@ export default function HomePage() {
               </div>
             )}
 
-            {activeTab === 'ledger' && currentMess && currentMembership && (
-              <LedgerView
-                messId={currentMess.id}
-                membershipId={currentMembership.id}
-                isManager={isManager}
-                token={token || undefined}
-              />
+            {/* TAB 4: ACCOUNTS (LEDGER + MONTHLY CLOSE) */}
+            {activeTab === 'accounts' && currentMess && currentMembership && (
+              <div className="space-y-4">
+                <div className="flex gap-2">
+                  <Button
+                    size="sm"
+                    variant={accountsSubTab === 'ledger' ? 'primary' : 'secondary'}
+                    onClick={() => setAccountsSubTab('ledger')}
+                  >
+                    {tNav('ledger')}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant={accountsSubTab === 'reports' ? 'primary' : 'secondary'}
+                    onClick={() => setAccountsSubTab('reports')}
+                  >
+                    {tNav('reports')}
+                  </Button>
+                </div>
+
+                {accountsSubTab === 'ledger' ? (
+                  <LedgerView
+                    messId={currentMess.id}
+                    membershipId={currentMembership.id}
+                    isManager={isManager}
+                    token={token || undefined}
+                  />
+                ) : (
+                  <MonthStatementView
+                    messId={currentMess.id}
+                    isManager={isManager}
+                    token={token || undefined}
+                  />
+                )}
+              </div>
             )}
 
-            {activeTab === 'reports' && currentMess && (
-              <MonthStatementView
-                messId={currentMess.id}
-                isManager={isManager}
-                token={token || undefined}
-              />
-            )}
+            {/* TAB 5: MORE (NOTICES + AUDIT + MANAGER + NEW MESS) */}
+            {activeTab === 'more' && currentMess && (
+              <div className="space-y-4">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      size="sm"
+                      variant={moreSubTab === 'notices' ? 'primary' : 'secondary'}
+                      onClick={() => setMoreSubTab('notices')}
+                    >
+                      {tNav('notices')}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant={moreSubTab === 'audit' ? 'primary' : 'secondary'}
+                      onClick={() => setMoreSubTab('audit')}
+                    >
+                      {tNav('audit')}
+                    </Button>
+                    {isManager && (
+                      <Button
+                        size="sm"
+                        variant={moreSubTab === 'manager' ? 'primary' : 'secondary'}
+                        onClick={() => setMoreSubTab('manager')}
+                      >
+                        {tNav('manager')}
+                      </Button>
+                    )}
+                  </div>
 
-            {activeTab === 'notices' && currentMess && (
-              <NoticeBoard
-                messId={currentMess.id}
-                isManager={isManager}
-                token={token || undefined}
-              />
-            )}
+                  <Button size="sm" variant="secondary" onClick={() => setIsCreateMessOpen(true)}>
+                    + {tMess('createMess')}
+                  </Button>
+                </div>
 
-            {activeTab === 'audit' && currentMess && (
-              <AuditLogViewer messId={currentMess.id} token={token || undefined} />
-            )}
+                {moreSubTab === 'notices' && (
+                  <NoticeBoard
+                    messId={currentMess.id}
+                    isManager={isManager}
+                    token={token || undefined}
+                  />
+                )}
 
-            {activeTab === 'manager' && currentMess && (
-              <ManagerPanel
-                messId={currentMess.id}
-                isManager={isManager}
-                token={token || undefined}
-              />
+                {moreSubTab === 'audit' && (
+                  <AuditLogViewer messId={currentMess.id} token={token || undefined} />
+                )}
+
+                {moreSubTab === 'manager' && (
+                  <ManagerPanel
+                    messId={currentMess.id}
+                    isManager={isManager}
+                    token={token || undefined}
+                  />
+                )}
+              </div>
             )}
           </>
         )}
@@ -540,7 +791,7 @@ export default function HomePage() {
           >
             <Input
               label={tMess('messName')}
-              placeholder="e.g., Green Mess Dhanmondi"
+              placeholder={tMess('messNamePlaceholder')}
               error={errors.name?.message}
               {...register('name')}
             />
@@ -600,13 +851,40 @@ export default function HomePage() {
               >
                 {tCommon('cancel')}
               </Button>
-              <Button size="sm" type="submit" isLoading={isSubmitting}>
+              <Button
+                size="sm"
+                type="submit"
+                isLoading={isSubmitting || createMessMutation.isPending}
+              >
                 {tMess('createButton')}
               </Button>
             </div>
           </form>
         </Modal>
       </main>
+
+      {/* Mobile Fixed Bottom Navigation Bar (5 clean equal tabs, zero overflow) */}
+      {currentMess && (
+        <nav className="md:hidden fixed bottom-0 left-0 right-0 z-30 bg-surface border-t border-border px-1 py-1.5 no-print">
+          <div className="grid grid-cols-5 gap-1">
+            {navItems.map((item) => {
+              const isActive = activeTab === item.key;
+              return (
+                <button
+                  key={item.key}
+                  type="button"
+                  onClick={() => setActiveTab(item.key)}
+                  className={`flex flex-col items-center justify-center py-2 rounded-token text-xs font-semibold transition-colors cursor-pointer ${
+                    isActive ? 'bg-primary-surface text-primary font-bold' : 'text-text-secondary'
+                  }`}
+                >
+                  <span className="truncate max-w-full px-1">{item.label}</span>
+                </button>
+              );
+            })}
+          </div>
+        </nav>
+      )}
     </div>
   );
 }

@@ -20,10 +20,6 @@ export interface MealPreferencesProps {
   messId: string;
   membershipId: string;
   token?: string;
-  initialMealType?: MealType;
-  initialHalfSlot?: SlotType | null;
-  initialEggPreference?: EggPreference;
-  initialToggleStatus?: boolean;
 }
 
 interface PreferencesDto {
@@ -34,26 +30,22 @@ interface PreferencesDto {
 }
 
 /**
- * Boarder meal preferences panel: continuous toggle, permanent default, and overrides.
+ * Boarder meal preferences panel: continuous switch, regular meal plan, egg preference, and single-day overrides.
  */
 export const MealPreferences: React.FC<MealPreferencesProps> = ({
   messId,
   membershipId,
-  token,
-  initialMealType = MealType.FULL,
-  initialHalfSlot = null,
-  initialEggPreference = EggPreference.NONE,
-  initialToggleStatus = true
+  token
 }) => {
   const t = useTranslations('meals');
   const tCommon = useTranslations('common');
   const locale = useLocale();
   const queryClient = useQueryClient();
 
-  const [mealType, setMealType] = useState<MealType>(initialMealType);
-  const [halfSlot, setHalfSlot] = useState<SlotType | null>(initialHalfSlot);
-  const [eggPreference, setEggPreference] = useState<EggPreference>(initialEggPreference);
-  const [isToggleOn, setIsToggleOn] = useState<boolean>(initialToggleStatus);
+  const [mealType, setMealType] = useState<MealType>(MealType.FULL);
+  const [halfSlot, setHalfSlot] = useState<SlotType | null>(null);
+  const [eggPreference, setEggPreference] = useState<EggPreference>(EggPreference.NONE);
+  const [isToggleOn, setIsToggleOn] = useState<boolean>(true);
   const [saveSuccessMsg, setSaveSuccessMsg] = useState<string | null>(null);
 
   const [isOverrideModalOpen, setIsOverrideModalOpen] = useState(false);
@@ -67,7 +59,18 @@ export const MealPreferences: React.FC<MealPreferencesProps> = ({
     return locale === 'bn' ? toBengaliDigits(val) : String(val);
   };
 
-  // Fetch saved preferences from API
+  const invalidateMealQueries = () => {
+    queryClient.invalidateQueries({ queryKey: ['heatmap'] });
+    queryClient.invalidateQueries({ queryKey: ['shopper-summary'] });
+    queryClient.invalidateQueries({ queryKey: ['my-balance'] });
+    queryClient.invalidateQueries({ queryKey: ['meal-preferences', messId, membershipId] });
+  };
+
+  const showSaved = () => {
+    setSaveSuccessMsg(t('preferencesSaved'));
+    setTimeout(() => setSaveSuccessMsg(null), 3000);
+  };
+
   const { data: savedPrefs } = useQuery<PreferencesDto>({
     queryKey: ['meal-preferences', messId, membershipId],
     queryFn: () =>
@@ -84,26 +87,19 @@ export const MealPreferences: React.FC<MealPreferencesProps> = ({
     }
   }, [savedPrefs]);
 
-  // Toggle mutation
   const toggleMutation = useMutation({
     mutationFn: (status: boolean) =>
       apiFetch(
         `/messes/${messId}/meals/toggle/${membershipId}`,
-        {
-          method: 'POST',
-          body: JSON.stringify({ status })
-        },
+        { method: 'POST', body: JSON.stringify({ status }) },
         token
       ),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['heatmap'] });
-      queryClient.invalidateQueries({ queryKey: ['meal-preferences', messId, membershipId] });
-      setSaveSuccessMsg(t('preferencesSaved'));
-      setTimeout(() => setSaveSuccessMsg(null), 3000);
+      invalidateMealQueries();
+      showSaved();
     }
   });
 
-  // Default profile mutation
   const defaultMutation = useMutation({
     mutationFn: (data: {
       mealType: MealType;
@@ -112,21 +108,15 @@ export const MealPreferences: React.FC<MealPreferencesProps> = ({
     }) =>
       apiFetch(
         `/messes/${messId}/meals/default/${membershipId}`,
-        {
-          method: 'POST',
-          body: JSON.stringify(data)
-        },
+        { method: 'POST', body: JSON.stringify(data) },
         token
       ),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['heatmap'] });
-      queryClient.invalidateQueries({ queryKey: ['meal-preferences', messId, membershipId] });
-      setSaveSuccessMsg(t('preferencesSaved'));
-      setTimeout(() => setSaveSuccessMsg(null), 3000);
+      invalidateMealQueries();
+      showSaved();
     }
   });
 
-  // Single-day override mutation
   const overrideMutation = useMutation({
     mutationFn: () =>
       apiFetch(
@@ -145,9 +135,8 @@ export const MealPreferences: React.FC<MealPreferencesProps> = ({
       ),
     onSuccess: () => {
       setIsOverrideModalOpen(false);
-      queryClient.invalidateQueries({ queryKey: ['heatmap'] });
-      setSaveSuccessMsg(t('preferencesSaved'));
-      setTimeout(() => setSaveSuccessMsg(null), 3000);
+      invalidateMealQueries();
+      showSaved();
     }
   });
 
@@ -160,47 +149,48 @@ export const MealPreferences: React.FC<MealPreferencesProps> = ({
     e.preventDefault();
     defaultMutation.mutate({
       mealType,
-      halfSlot: mealType === MealType.HALF ? halfSlot : null,
+      halfSlot: mealType === MealType.HALF ? halfSlot || SlotType.LUNCH : null,
       eggPreference
     });
   };
 
   return (
-    <div className="space-y-5">
-      {/* Toast Notification */}
+    <div className="space-y-4">
       {saveSuccessMsg && (
-        <div className="p-3 rounded-token bg-success-surface border border-success/30 text-success text-sm font-medium flex items-center justify-between shadow-xs">
+        <div className="p-3 rounded-token bg-success-surface border border-success/30 text-success text-sm font-semibold flex items-center justify-between">
           <span>{saveSuccessMsg}</span>
           <button
             type="button"
             onClick={() => setSaveSuccessMsg(null)}
-            className="text-success font-bold text-base cursor-pointer"
+            className="text-success font-bold px-2 cursor-pointer"
           >
-            x
+            ✕
           </button>
         </div>
       )}
 
       {/* Continuous Toggle Switch Card */}
-      <Card className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
+      <Card className="flex items-center justify-between gap-4">
+        <div className="min-w-0">
           <div className="flex items-center gap-2">
-            <h3 className="font-bold text-lg text-text-primary">{t('continuousToggle')}</h3>
+            <h3 className="font-bold text-base sm:text-lg text-text-primary">
+              {t('continuousToggle')}
+            </h3>
             <span
               className={`text-xs px-2.5 py-0.5 rounded-full font-bold ${
-                isToggleOn ? 'bg-success/15 text-success' : 'bg-danger/15 text-danger'
+                isToggleOn ? 'bg-success-surface text-success' : 'bg-danger-surface text-danger'
               }`}
             >
               {isToggleOn ? t('on') : t('off')}
             </span>
           </div>
-          <p className="text-xs text-text-secondary mt-1 max-w-xl">{t('lockNotice')}</p>
+          <p className="text-xs text-text-secondary mt-1">{t('lockNotice')}</p>
         </div>
 
         <button
           type="button"
           onClick={() => handleToggle(!isToggleOn)}
-          className={`w-14 h-8 flex items-center rounded-full p-1 transition-colors cursor-pointer ${
+          className={`w-14 h-8 shrink-0 flex items-center rounded-full p-1 transition-colors cursor-pointer ${
             isToggleOn ? 'bg-primary' : 'bg-border-strong'
           }`}
           role="switch"
@@ -214,43 +204,32 @@ export const MealPreferences: React.FC<MealPreferencesProps> = ({
         </button>
       </Card>
 
-      {/* Permanent Regular Daily Meal Preferences */}
+      {/* Regular Daily Meal Plan */}
       <Card className="space-y-5">
-        <div className="flex items-center justify-between pb-3 border-b border-border">
-          <div>
-            <h3 className="font-bold text-lg text-text-primary">{t('title')}</h3>
-            <p className="text-xs text-text-muted mt-0.5">
-              {t('fullMeal')} / {t('halfMeal')}
-            </p>
-          </div>
+        <div className="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-border">
+          <h3 className="font-bold text-base sm:text-lg text-text-primary">{t('title')}</h3>
           <Button size="sm" variant="secondary" onClick={() => setIsOverrideModalOpen(true)}>
             {t('overrideTitle')}
           </Button>
         </div>
 
-        <form onSubmit={handleSaveDefaults} className="space-y-6">
-          {/* Meal Type Picker */}
+        <form onSubmit={handleSaveDefaults} className="space-y-5">
           <div>
-            <label className="text-sm font-semibold text-text-primary mb-2.5 block">
-              {t('slot')}
+            <label className="text-sm font-semibold text-text-primary mb-2 block">
+              {t('mealPlanType')}
             </label>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <button
                 type="button"
                 onClick={() => setMealType(MealType.FULL)}
-                className={`p-4 rounded-token border text-left transition-all cursor-pointer ${
+                className={`p-3.5 rounded-token border text-left transition-all cursor-pointer ${
                   mealType === MealType.FULL
-                    ? 'border-primary bg-primary-surface text-primary shadow-xs'
+                    ? 'border-primary bg-primary-surface text-primary'
                     : 'border-border bg-surface text-text-secondary hover:bg-surface-elevated'
                 }`}
               >
-                <div className="flex items-center justify-between">
-                  <span className="font-bold text-base">{t('fullMeal')}</span>
-                  {mealType === MealType.FULL && (
-                    <span className="w-2.5 h-2.5 rounded-full bg-primary" />
-                  )}
-                </div>
-                <p className="text-xs mt-1 text-text-muted">{t('lunchDinner')}</p>
+                <span className="font-bold text-sm sm:text-base block">{t('fullMeal')}</span>
+                <span className="text-xs text-text-muted mt-0.5 block">{t('lunchDinner')}</span>
               </button>
 
               <button
@@ -259,37 +238,33 @@ export const MealPreferences: React.FC<MealPreferencesProps> = ({
                   setMealType(MealType.HALF);
                   if (!halfSlot) setHalfSlot(SlotType.LUNCH);
                 }}
-                className={`p-4 rounded-token border text-left transition-all cursor-pointer ${
+                className={`p-3.5 rounded-token border text-left transition-all cursor-pointer ${
                   mealType === MealType.HALF
-                    ? 'border-primary bg-primary-surface text-primary shadow-xs'
+                    ? 'border-primary bg-primary-surface text-primary'
                     : 'border-border bg-surface text-text-secondary hover:bg-surface-elevated'
                 }`}
               >
-                <div className="flex items-center justify-between">
-                  <span className="font-bold text-base">{t('halfMeal')}</span>
-                  {mealType === MealType.HALF && (
-                    <span className="w-2.5 h-2.5 rounded-full bg-primary" />
-                  )}
-                </div>
-                <p className="text-xs mt-1 text-text-muted">
+                <span className="font-bold text-sm sm:text-base block">{t('halfMeal')}</span>
+                <span className="text-xs text-text-muted mt-0.5 block">
                   {t('lunch')} / {t('dinner')}
-                </p>
+                </span>
               </button>
             </div>
           </div>
 
-          {/* Half Meal Slot Selection (if half meal is selected) */}
           {mealType === MealType.HALF && (
-            <div className="p-4 rounded-token bg-surface-elevated/60 border border-border space-y-2">
-              <span className="text-xs font-semibold text-text-primary block">{t('slot')}</span>
-              <div className="flex gap-2">
+            <div className="p-3.5 rounded-token bg-surface-elevated/60 border border-border space-y-2">
+              <span className="text-xs font-semibold text-text-primary block">
+                {t('halfMealChoice')}
+              </span>
+              <div className="grid grid-cols-2 gap-2">
                 <button
                   type="button"
                   onClick={() => setHalfSlot(SlotType.LUNCH)}
-                  className={`flex-1 h-10 rounded-token text-sm font-semibold border transition-all cursor-pointer ${
+                  className={`h-10 rounded-token text-sm font-semibold border transition-all cursor-pointer ${
                     halfSlot === SlotType.LUNCH
-                      ? 'bg-primary text-white border-primary shadow-xs'
-                      : 'bg-surface border-border text-text-secondary hover:bg-surface-elevated'
+                      ? 'bg-primary text-white border-primary'
+                      : 'bg-surface border-border text-text-secondary'
                   }`}
                 >
                   {t('lunch')}
@@ -297,10 +272,10 @@ export const MealPreferences: React.FC<MealPreferencesProps> = ({
                 <button
                   type="button"
                   onClick={() => setHalfSlot(SlotType.DINNER)}
-                  className={`flex-1 h-10 rounded-token text-sm font-semibold border transition-all cursor-pointer ${
+                  className={`h-10 rounded-token text-sm font-semibold border transition-all cursor-pointer ${
                     halfSlot === SlotType.DINNER
-                      ? 'bg-primary text-white border-primary shadow-xs'
-                      : 'bg-surface border-border text-text-secondary hover:bg-surface-elevated'
+                      ? 'bg-primary text-white border-primary'
+                      : 'bg-surface border-border text-text-secondary'
                   }`}
                 >
                   {t('dinner')}
@@ -309,12 +284,11 @@ export const MealPreferences: React.FC<MealPreferencesProps> = ({
             </div>
           )}
 
-          {/* Egg Preference */}
           <div>
-            <label className="text-sm font-semibold text-text-primary mb-2.5 block">
+            <label className="text-sm font-semibold text-text-primary mb-2 block">
               {t('eggPreference')}
             </label>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
               {[
                 { key: EggPreference.NONE, label: t('eggNone') },
                 { key: EggPreference.INSTEAD_OF_FISH, label: t('eggInsteadOfFish') },
@@ -326,7 +300,7 @@ export const MealPreferences: React.FC<MealPreferencesProps> = ({
                   onClick={() => setEggPreference(item.key)}
                   className={`p-3 rounded-token text-xs sm:text-sm font-medium border text-center transition-all cursor-pointer ${
                     eggPreference === item.key
-                      ? 'border-primary bg-primary text-white shadow-xs font-semibold'
+                      ? 'border-primary bg-primary text-white font-semibold'
                       : 'border-border bg-surface text-text-secondary hover:bg-surface-elevated'
                   }`}
                 >
@@ -366,7 +340,7 @@ export const MealPreferences: React.FC<MealPreferencesProps> = ({
               <button
                 type="button"
                 onClick={() => setOverrideSlot(SlotType.LUNCH)}
-                className={`h-10 rounded-token text-xs font-semibold border cursor-pointer ${
+                className={`h-10 rounded-token text-sm font-semibold border cursor-pointer ${
                   overrideSlot === SlotType.LUNCH
                     ? 'bg-primary text-white border-primary'
                     : 'bg-surface border-border text-text-secondary'
@@ -377,7 +351,7 @@ export const MealPreferences: React.FC<MealPreferencesProps> = ({
               <button
                 type="button"
                 onClick={() => setOverrideSlot(SlotType.DINNER)}
-                className={`h-10 rounded-token text-xs font-semibold border cursor-pointer ${
+                className={`h-10 rounded-token text-sm font-semibold border cursor-pointer ${
                   overrideSlot === SlotType.DINNER
                     ? 'bg-primary text-white border-primary'
                     : 'bg-surface border-border text-text-secondary'
@@ -396,7 +370,7 @@ export const MealPreferences: React.FC<MealPreferencesProps> = ({
               <button
                 type="button"
                 onClick={() => setOverrideStatus(true)}
-                className={`h-10 rounded-token text-xs font-semibold border cursor-pointer ${
+                className={`h-10 rounded-token text-sm font-semibold border cursor-pointer ${
                   overrideStatus
                     ? 'bg-success text-white border-success'
                     : 'bg-surface border-border text-text-secondary'
@@ -407,7 +381,7 @@ export const MealPreferences: React.FC<MealPreferencesProps> = ({
               <button
                 type="button"
                 onClick={() => setOverrideStatus(false)}
-                className={`h-10 rounded-token text-xs font-semibold border cursor-pointer ${
+                className={`h-10 rounded-token text-sm font-semibold border cursor-pointer ${
                   !overrideStatus
                     ? 'bg-danger text-white border-danger'
                     : 'bg-surface border-border text-text-secondary'
@@ -430,12 +404,12 @@ export const MealPreferences: React.FC<MealPreferencesProps> = ({
               >
                 -
               </button>
-              <span className="text-lg font-bold text-text-primary min-w-[30px] text-center">
+              <span className="text-lg font-bold text-text-primary min-w-[32px] text-center">
                 {formatDigit(guestCount)}
               </span>
               <button
                 type="button"
-                onClick={() => setGuestCount((c) => c + 1)}
+                onClick={() => setGuestCount((c) => Math.min(20, c + 1))}
                 className="w-10 h-10 rounded-token border border-border bg-surface text-lg font-bold hover:bg-surface-elevated flex items-center justify-center cursor-pointer"
               >
                 +

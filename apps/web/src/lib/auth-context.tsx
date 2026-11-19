@@ -4,6 +4,8 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import { UserDto, AuthResponseDto } from '@mess/shared';
 import { apiFetch } from './api-client';
 
+const ACTIVE_MESS_STORAGE_KEY = 'mm_active_mess_id';
+
 interface AuthContextValue {
   user: UserDto | null;
   token: string | null;
@@ -23,17 +25,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    // Attempt silent refresh on startup using the httpOnly refresh cookie
     const initSession = async () => {
       try {
         const data = await apiFetch<AuthResponseDto>('/auth/refresh', { method: 'POST' });
         setUser(data.user);
         setToken(data.accessToken);
-        if (data.activeMessId) {
+        const savedMessId =
+          typeof window !== 'undefined'
+            ? window.localStorage.getItem(ACTIVE_MESS_STORAGE_KEY)
+            : null;
+        if (savedMessId) {
+          setActiveMessIdState(savedMessId);
+        } else if (data.activeMessId) {
           setActiveMessIdState(data.activeMessId);
         }
       } catch {
-        // Unauthenticated session
+        setUser(null);
+        setToken(null);
       } finally {
         setIsLoading(false);
       }
@@ -47,6 +55,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setToken(data.accessToken);
     if (data.activeMessId) {
       setActiveMessIdState(data.activeMessId);
+      if (typeof window !== 'undefined') {
+        window.localStorage.setItem(ACTIVE_MESS_STORAGE_KEY, data.activeMessId);
+      }
     }
   };
 
@@ -59,11 +70,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setUser(null);
       setToken(null);
       setActiveMessIdState(null);
+      if (typeof window !== 'undefined') {
+        window.localStorage.removeItem(ACTIVE_MESS_STORAGE_KEY);
+      }
     }
   };
 
   const setActiveMessId = (id: string) => {
     setActiveMessIdState(id);
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem(ACTIVE_MESS_STORAGE_KEY, id);
+    }
   };
 
   return (

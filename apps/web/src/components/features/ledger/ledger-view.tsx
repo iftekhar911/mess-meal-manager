@@ -6,6 +6,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   BalanceEvaluationDto,
   LedgerEntryDto,
+  LedgerType,
   MembershipDto,
   toBengaliDigits,
   getDhakaDateString
@@ -13,6 +14,7 @@ import {
 import { Card } from '../../ui/card';
 import { Button } from '../../ui/button';
 import { Input } from '../../ui/input';
+import { Select } from '../../ui/select';
 import { Modal } from '../../ui/modal';
 import { StatusDot } from '../../ui/status-dot';
 import { apiFetch } from '../../../lib/api-client';
@@ -25,7 +27,8 @@ export interface LedgerViewProps {
 }
 
 /**
- * Account ledger and balance statement view with manager deposit entry.
+ * Account ledger and balance statement view with localized transaction types
+ * and manager deposit entry.
  */
 export const LedgerView: React.FC<LedgerViewProps> = ({
   messId,
@@ -35,6 +38,7 @@ export const LedgerView: React.FC<LedgerViewProps> = ({
 }) => {
   const t = useTranslations('ledger');
   const tCommon = useTranslations('common');
+  const tMembers = useTranslations('members');
   const locale = useLocale();
   const queryClient = useQueryClient();
 
@@ -49,16 +53,31 @@ export const LedgerView: React.FC<LedgerViewProps> = ({
     return locale === 'bn' ? toBengaliDigits(val) : String(val);
   };
 
-  // Fetch all members if manager
+  const getTypeLabel = (type: LedgerType) => {
+    switch (type) {
+      case LedgerType.DEPOSIT:
+        return t('deposit');
+      case LedgerType.FUEL:
+        return t('fuelCharge');
+      case LedgerType.COOK_BILL:
+        return t('cookCharge');
+      case LedgerType.ADJUSTMENT:
+        return t('adjustment');
+      case LedgerType.REFUND:
+        return t('refund');
+      default:
+        return t('mealCharge');
+    }
+  };
+
   const { data: members } = useQuery<MembershipDto[]>({
     queryKey: ['mess-members', messId],
     queryFn: () => apiFetch<MembershipDto[]>(`/messes/${messId}/members`, {}, token),
     enabled: !!messId && isManager
   });
 
-  // Balance query
   const { data: balance, isLoading: isBalanceLoading } = useQuery<BalanceEvaluationDto>({
-    queryKey: ['ledger-balance', activeMemberId],
+    queryKey: ['ledger-balance', messId, activeMemberId],
     queryFn: () =>
       apiFetch<BalanceEvaluationDto>(
         `/messes/${messId}/ledger/balance/${activeMemberId}`,
@@ -68,15 +87,13 @@ export const LedgerView: React.FC<LedgerViewProps> = ({
     enabled: !!activeMemberId
   });
 
-  // Statement query
   const { data: statement, isLoading: isStatementLoading } = useQuery<LedgerEntryDto[]>({
-    queryKey: ['ledger-statement', activeMemberId],
+    queryKey: ['ledger-statement', messId, activeMemberId],
     queryFn: () =>
       apiFetch<LedgerEntryDto[]>(`/messes/${messId}/ledger/statement/${activeMemberId}`, {}, token),
     enabled: !!activeMemberId
   });
 
-  // Deposit mutation
   const depositMutation = useMutation({
     mutationFn: () =>
       apiFetch(
@@ -87,8 +104,7 @@ export const LedgerView: React.FC<LedgerViewProps> = ({
             membershipId: targetDepositMemberId,
             amount: depositAmount,
             date: depositDate,
-            note: depositNote,
-            restoreAutoOffMeals: true
+            note: depositNote
           })
         },
         token
@@ -96,34 +112,34 @@ export const LedgerView: React.FC<LedgerViewProps> = ({
     onSuccess: () => {
       setIsDepositModalOpen(false);
       setDepositNote('');
+      queryClient.invalidateQueries({ queryKey: ['my-balance'] });
       queryClient.invalidateQueries({ queryKey: ['ledger-balance'] });
       queryClient.invalidateQueries({ queryKey: ['ledger-statement'] });
-      queryClient.invalidateQueries({ queryKey: ['heatmap'] });
+      queryClient.invalidateQueries({ queryKey: ['month-statement'] });
+      queryClient.invalidateQueries({ queryKey: ['audit-logs', messId] });
     }
   });
 
+  const memberOptions = (members || []).map((m) => ({
+    value: m.id,
+    label: `${m.user?.name || tCommon('member')} (${m.role === 'MANAGER' ? tMembers('manager') : tMembers('boarder')})`
+  }));
+
   return (
     <div className="space-y-4">
-      {/* Member Filter Bar for Manager */}
       {isManager && members && members.length > 1 && (
-        <div className="flex items-center justify-between gap-3 p-3 bg-surface border border-border rounded-token card-shadow">
-          <label className="text-xs font-semibold text-text-secondary">{t('selectMember')}:</label>
-          <select
+        <Card className="p-3.5">
+          <Select
+            label={t('selectMember')}
+            options={memberOptions}
             value={activeMemberId}
             onChange={(e) => setActiveMemberId(e.target.value)}
-            className="text-xs font-semibold bg-surface-elevated text-text-primary border border-border px-3 py-1.5 rounded-token focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer"
-          >
-            {members.map((m) => (
-              <option key={m.id} value={m.id}>
-                {m.user?.name || 'Member'} ({m.role})
-              </option>
-            ))}
-          </select>
-        </div>
+          />
+        </Card>
       )}
 
       {/* Balance Summary Card */}
-      <Card className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 card-shadow">
+      <Card className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <span className="text-xs font-semibold text-text-secondary block">{t('balance')}</span>
           <div className="flex items-center gap-3 mt-1">
@@ -156,15 +172,17 @@ export const LedgerView: React.FC<LedgerViewProps> = ({
             }}
             size="md"
           >
-            {t('recordDeposit')}
+            + {t('recordDeposit')}
           </Button>
         )}
       </Card>
 
       {/* Itemized Statement Table */}
-      <Card className="card-shadow space-y-3">
+      <Card className="space-y-3">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 pb-2 border-b border-border">
-          <h3 className="font-bold text-lg text-text-primary">{t('title')}</h3>
+          <h3 className="font-bold text-base sm:text-lg text-text-primary">
+            {t('depositHistory')}
+          </h3>
           <span className="text-xs text-text-muted">{t('reversalNotice')}</span>
         </div>
 
@@ -184,7 +202,13 @@ export const LedgerView: React.FC<LedgerViewProps> = ({
               </thead>
               <tbody className="divide-y divide-border">
                 {statement.map((entry) => {
-                  const isCredit = Number(entry.amount) > 0;
+                  const numAmt = Number(entry.amount);
+                  const isCredit =
+                    entry.type === LedgerType.DEPOSIT ||
+                    entry.type === LedgerType.REFUND ||
+                    (entry.type === LedgerType.ADJUSTMENT && numAmt > 0);
+                  const absFormatted = Math.abs(numAmt).toFixed(2);
+
                   return (
                     <tr key={entry.id} className="hover:bg-surface-elevated/50 transition-colors">
                       <td className="py-3 px-3 text-text-secondary text-xs whitespace-nowrap">
@@ -192,7 +216,7 @@ export const LedgerView: React.FC<LedgerViewProps> = ({
                       </td>
                       <td className="py-3 px-3 text-text-primary font-medium">
                         <span className="inline-block mr-1.5 font-semibold text-xs px-2 py-0.5 rounded-full bg-surface-elevated border border-border">
-                          {entry.type}
+                          {getTypeLabel(entry.type)}
                         </span>
                         {entry.note && (
                           <span className="text-text-secondary text-xs">{entry.note}</span>
@@ -203,8 +227,8 @@ export const LedgerView: React.FC<LedgerViewProps> = ({
                           isCredit ? 'text-success' : 'text-danger'
                         }`}
                       >
-                        {isCredit ? '+' : ''}
-                        {formatDigit(entry.amount)} {tCommon('bdt')}
+                        {isCredit ? '+' : '-'}
+                        {formatDigit(absFormatted)} {tCommon('bdt')}
                       </td>
                     </tr>
                   );
@@ -222,23 +246,13 @@ export const LedgerView: React.FC<LedgerViewProps> = ({
         title={t('recordDeposit')}
       >
         <div className="space-y-4">
-          {isManager && members && members.length > 1 && (
-            <div>
-              <label className="text-xs font-semibold text-text-secondary mb-1 block">
-                {t('selectMember')}
-              </label>
-              <select
-                value={targetDepositMemberId}
-                onChange={(e) => setTargetDepositMemberId(e.target.value)}
-                className="w-full h-10 px-3 rounded-token border border-border bg-surface text-sm text-text-primary cursor-pointer"
-              >
-                {members.map((m) => (
-                  <option key={m.id} value={m.id}>
-                    {m.user?.name || 'Member'} ({m.role})
-                  </option>
-                ))}
-              </select>
-            </div>
+          {isManager && members && members.length > 0 && (
+            <Select
+              label={t('selectMember')}
+              options={memberOptions}
+              value={targetDepositMemberId}
+              onChange={(e) => setTargetDepositMemberId(e.target.value)}
+            />
           )}
 
           <Input
@@ -257,14 +271,13 @@ export const LedgerView: React.FC<LedgerViewProps> = ({
               value={depositAmount}
               onChange={(e) => setDepositAmount(Number(e.target.value))}
             />
-            {/* Quick preset amount pills */}
-            <div className="flex gap-2 mt-2">
+            <div className="flex flex-wrap gap-2 mt-2">
               {[500, 1000, 2000, 3000, 5000].map((amt) => (
                 <button
                   key={amt}
                   type="button"
                   onClick={() => setDepositAmount(amt)}
-                  className={`text-xs px-2.5 py-1 rounded-token border cursor-pointer font-medium ${
+                  className={`text-xs px-3 py-1.5 rounded-token border cursor-pointer font-semibold ${
                     depositAmount === amt
                       ? 'bg-primary text-white border-primary'
                       : 'bg-surface border-border text-text-secondary hover:bg-surface-elevated'
@@ -278,7 +291,7 @@ export const LedgerView: React.FC<LedgerViewProps> = ({
 
           <Input
             label={tCommon('note')}
-            placeholder="e.g., Bank transfer, bKash, or cash"
+            placeholder="bKash, Nagad, Cash"
             value={depositNote}
             onChange={(e) => setDepositNote(e.target.value)}
           />
@@ -291,6 +304,7 @@ export const LedgerView: React.FC<LedgerViewProps> = ({
               size="sm"
               isLoading={depositMutation.isPending}
               onClick={() => depositMutation.mutate()}
+              disabled={depositAmount <= 0}
             >
               {tCommon('confirm')}
             </Button>

@@ -18,7 +18,7 @@ export interface NoticeBoardProps {
 }
 
 /**
- * Notice board listing announcements and enabling managers to post new notices.
+ * Notice board listing mess announcements with manager post and delete controls.
  */
 export const NoticeBoard: React.FC<NoticeBoardProps> = ({ messId, isManager = false, token }) => {
   const t = useTranslations('notices');
@@ -40,10 +40,7 @@ export const NoticeBoard: React.FC<NoticeBoardProps> = ({ messId, isManager = fa
     mutationFn: () =>
       apiFetch(
         `/messes/${messId}/notices`,
-        {
-          method: 'POST',
-          body: JSON.stringify({ title, body })
-        },
+        { method: 'POST', body: JSON.stringify({ title, body }) },
         token
       ),
     onSuccess: () => {
@@ -54,13 +51,21 @@ export const NoticeBoard: React.FC<NoticeBoardProps> = ({ messId, isManager = fa
     }
   });
 
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) =>
+      apiFetch(`/messes/${messId}/notices/${id}`, { method: 'DELETE' }, token),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['notices', messId] });
+    }
+  });
+
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between pb-1">
+      <div className="flex items-center justify-between">
         <h3 className="font-bold text-lg text-text-primary">{tNav('notices')}</h3>
         {isManager && (
           <Button onClick={() => setIsPostModalOpen(true)} size="sm">
-            {t('postNotice')}
+            + {t('postNotice')}
           </Button>
         )}
       </div>
@@ -68,34 +73,48 @@ export const NoticeBoard: React.FC<NoticeBoardProps> = ({ messId, isManager = fa
       {isLoading ? (
         <p className="text-sm text-text-secondary py-6 text-center">{tCommon('loading')}</p>
       ) : !notices || notices.length === 0 ? (
-        <Card className="text-center py-8 text-text-muted text-sm font-medium card-shadow">
+        <Card className="text-center py-8 text-text-muted text-sm font-medium">
           {t('noNotices')}
         </Card>
       ) : (
         <div className="space-y-3">
           {notices.map((notice) => (
-            <Card key={notice.id} className="space-y-2 card-shadow">
-              <div className="flex items-center justify-between">
+            <Card key={notice.id} className="space-y-2">
+              <div className="flex items-start justify-between gap-2">
                 <h4 className="font-bold text-base text-text-primary">{notice.title}</h4>
-                <span className="text-2xs text-text-muted px-2 py-0.5 rounded-full bg-surface-elevated border border-border">
+                <span className="text-xs text-text-muted px-2 py-0.5 rounded-full bg-surface-elevated border border-border shrink-0">
                   {notice.createdAt.slice(0, 10)}
                 </span>
               </div>
               <p className="text-sm text-text-secondary leading-relaxed whitespace-pre-wrap">
                 {notice.body}
               </p>
-              {notice.authorName && (
-                <div className="pt-2 border-t border-border flex items-center gap-1.5 text-xs text-text-muted font-medium">
-                  <span>{t('publishedBy')}:</span>
-                  <span className="text-text-primary font-semibold">{notice.authorName}</span>
-                </div>
-              )}
+              <div className="pt-2 border-t border-border flex items-center justify-between gap-2">
+                {notice.authorName ? (
+                  <p className="text-xs text-text-muted font-medium">
+                    {t('publishedBy')}:{' '}
+                    <span className="text-text-primary font-semibold">{notice.authorName}</span>
+                  </p>
+                ) : (
+                  <div />
+                )}
+                {isManager && (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="text-danger h-8 text-xs"
+                    onClick={() => deleteMutation.mutate(notice.id)}
+                    isLoading={deleteMutation.isPending}
+                  >
+                    {tCommon('delete')}
+                  </Button>
+                )}
+              </div>
             </Card>
           ))}
         </div>
       )}
 
-      {/* Post Notice Modal */}
       <Modal
         isOpen={isPostModalOpen}
         onClose={() => setIsPostModalOpen(false)}
@@ -104,19 +123,15 @@ export const NoticeBoard: React.FC<NoticeBoardProps> = ({ messId, isManager = fa
         <div className="space-y-4">
           <Input
             label={t('noticeTitle')}
-            placeholder="e.g., Monthly meeting or grocery duty notice"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
           />
-
           <Textarea
             label={t('noticeBody')}
-            placeholder="Write announcement details..."
             rows={4}
             value={body}
             onChange={(e) => setBody(e.target.value)}
           />
-
           <div className="flex justify-end gap-2 pt-3 border-t border-border">
             <Button variant="secondary" size="sm" onClick={() => setIsPostModalOpen(false)}>
               {tCommon('cancel')}

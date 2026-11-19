@@ -23,9 +23,11 @@ export default function RegisterPage() {
   const {
     register,
     handleSubmit,
-    formState: { errors, isSubmitting }
+    formState: { errors, isSubmitting, isSubmitted }
   } = useForm<RegisterInput>({
     resolver: zodResolver(RegisterSchema),
+    mode: 'onSubmit',
+    reValidateMode: 'onChange',
     defaultValues: {
       name: '',
       phone: '',
@@ -45,6 +47,8 @@ export default function RegisterPage() {
     } catch (err: unknown) {
       if (err instanceof ApiClientError) {
         setServerError(err.message);
+      } else if (err instanceof Error) {
+        setServerError(err.message);
       } else {
         setServerError(tCommon('error'));
       }
@@ -53,14 +57,16 @@ export default function RegisterPage() {
 
   return (
     <div className="min-h-screen flex flex-col justify-center items-center p-4 bg-background">
-      <div className="absolute top-4 right-4">
+      <div className="fixed top-4 right-4 z-10">
         <LanguageSwitcher />
       </div>
 
-      <div className="w-full max-w-md">
-        {/* Logo and Brand Header */}
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-primary-surface text-primary border border-primary/20 shadow-xs mb-3">
+      <div className="w-full max-w-md space-y-6">
+        <div className="text-center">
+          <Link
+            href="/"
+            className="inline-flex items-center justify-center w-14 h-14 rounded-token bg-primary text-white shadow-sm mb-3"
+          >
             <svg
               className="w-7 h-7"
               fill="none"
@@ -74,25 +80,29 @@ export default function RegisterPage() {
                 d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"
               />
             </svg>
-          </div>
+          </Link>
           <h1 className="text-2xl font-bold text-text-primary">{tCommon('appName')}</h1>
           <p className="text-sm text-text-secondary mt-1">{t('registerSubtitle')}</p>
         </div>
 
         <Card className="p-6 sm:p-8">
-          <h2 className="text-xl font-bold text-text-primary mb-6">{t('registerTitle')}</h2>
+          <h2 className="text-xl font-bold text-text-primary mb-5">{t('registerTitle')}</h2>
 
           {serverError && (
-            <div className="p-3.5 mb-5 rounded-token bg-danger-surface border border-danger/30 text-sm text-danger font-medium">
+            <div
+              role="alert"
+              className="p-3.5 mb-5 rounded-token bg-danger-surface border border-danger/30 text-sm text-danger font-medium"
+            >
               {serverError}
             </div>
           )}
 
-          <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+          <form onSubmit={handleSubmit(onSubmit)} noValidate className="space-y-4">
             <Input
               label={t('nameLabel')}
               placeholder={t('namePlaceholder')}
-              error={errors.name?.message}
+              autoComplete="name"
+              error={isSubmitted ? errors.name?.message : undefined}
               {...register('name')}
             />
 
@@ -100,7 +110,8 @@ export default function RegisterPage() {
               label={t('phoneLabel')}
               placeholder={t('phonePlaceholder')}
               type="tel"
-              error={errors.phone?.message}
+              autoComplete="tel"
+              error={isSubmitted ? errors.phone?.message : undefined}
               {...register('phone')}
             />
 
@@ -108,7 +119,8 @@ export default function RegisterPage() {
               label={t('passwordLabel')}
               placeholder={t('passwordPlaceholder')}
               type="password"
-              error={errors.password?.message}
+              autoComplete="new-password"
+              error={isSubmitted ? errors.password?.message : undefined}
               {...register('password')}
             />
 
@@ -120,7 +132,7 @@ export default function RegisterPage() {
           <div className="mt-6 pt-5 border-t border-border text-center">
             <Link
               href="/login"
-              className="text-sm font-medium text-primary hover:text-primary-hover hover:underline transition-colors"
+              className="text-sm font-medium text-primary hover:text-primary-hover hover:underline"
             >
               {t('hasAccount')}
             </Link>

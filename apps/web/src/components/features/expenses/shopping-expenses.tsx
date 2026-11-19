@@ -3,7 +3,12 @@
 import React, { useState } from 'react';
 import { useTranslations, useLocale } from 'next-intl';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { ShoppingExpenseDto, toBengaliDigits, getDhakaDateString } from '@mess/shared';
+import {
+  ExpenseStatus,
+  ShoppingExpenseDto,
+  toBengaliDigits,
+  getDhakaDateString
+} from '@mess/shared';
 import { Card } from '../../ui/card';
 import { Button } from '../../ui/button';
 import { Input } from '../../ui/input';
@@ -23,7 +28,7 @@ interface ExpenseRowItem {
 }
 
 /**
- * Component for shopping expense records, receipts, and public audit lists.
+ * Shopping expense list, itemized receipt submission, and manager approval controls.
  */
 export const ShoppingExpenses: React.FC<ShoppingExpensesProps> = ({
   messId,
@@ -31,7 +36,6 @@ export const ShoppingExpenses: React.FC<ShoppingExpensesProps> = ({
   token
 }) => {
   const t = useTranslations('shopper');
-  const tNav = useTranslations('nav');
   const tCommon = useTranslations('common');
   const locale = useLocale();
   const queryClient = useQueryClient();
@@ -46,6 +50,12 @@ export const ShoppingExpenses: React.FC<ShoppingExpensesProps> = ({
 
   const formatDigit = (val: number | string) => {
     return locale === 'bn' ? toBengaliDigits(val) : String(val);
+  };
+
+  const getStatusLabel = (status: ExpenseStatus) => {
+    if (status === ExpenseStatus.APPROVED) return t('statusApproved');
+    if (status === ExpenseStatus.REJECTED) return t('statusRejected');
+    return t('statusPending');
   };
 
   const { data: expenses, isLoading } = useQuery<ShoppingExpenseDto[]>({
@@ -68,7 +78,7 @@ export const ShoppingExpenses: React.FC<ShoppingExpensesProps> = ({
           body: JSON.stringify({
             date: expenseDate,
             receiptUrl: receiptUrl || undefined,
-            items: items.filter((i) => i.name && i.price > 0)
+            items: items.filter((i) => i.name.trim() && i.price > 0)
           })
         },
         token
@@ -78,21 +88,17 @@ export const ShoppingExpenses: React.FC<ShoppingExpensesProps> = ({
       setItems([{ name: '', quantity: '', price: 0 }]);
       setReceiptUrl('');
       queryClient.invalidateQueries({ queryKey: ['expenses-shopping', messId] });
-      queryClient.invalidateQueries({ queryKey: ['shopper-summary'] });
+      queryClient.invalidateQueries({ queryKey: ['month-statement', messId] });
     }
   });
 
-  const approveMutation = useMutation({
-    mutationFn: (expenseId: string) =>
-      apiFetch(
-        `/messes/${messId}/expenses/shopping/${expenseId}/approve`,
-        {
-          method: 'POST'
-        },
-        token
-      ),
+  const decisionMutation = useMutation({
+    mutationFn: ({ id, action }: { id: string; action: 'approve' | 'reject' }) =>
+      apiFetch(`/messes/${messId}/expenses/shopping/${id}/${action}`, { method: 'POST' }, token),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['expenses-shopping', messId] });
+      queryClient.invalidateQueries({ queryKey: ['month-statement', messId] });
+      queryClient.invalidateQueries({ queryKey: ['audit-logs', messId] });
     }
   });
 
@@ -104,101 +110,113 @@ export const ShoppingExpenses: React.FC<ShoppingExpensesProps> = ({
     const updated = [...items];
     const target = updated[index];
     if (target) {
-      if (field === 'price') {
-        target.price = Number(value);
-      } else if (field === 'name') {
-        target.name = String(value);
-      } else if (field === 'quantity') {
-        target.quantity = String(value);
-      }
+      if (field === 'price') target.price = Number(value);
+      else if (field === 'name') target.name = String(value);
+      else if (field === 'quantity') target.quantity = String(value);
       setItems(updated);
     }
   };
 
+  const hasValidItems = items.some((i) => i.name.trim() && i.price > 0);
+
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between pb-1">
-        <h3 className="font-bold text-lg text-text-primary">{tNav('shopping')}</h3>
+    <Card className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-border">
+        <h3 className="font-bold text-base sm:text-lg text-text-primary">{t('recordExpense')}</h3>
         <Button onClick={() => setIsRecordModalOpen(true)} size="sm">
-          {t('recordExpense')}
+          + {t('recordExpense')}
         </Button>
       </div>
 
       {isLoading ? (
         <p className="text-sm text-text-secondary py-6 text-center">{tCommon('loading')}</p>
       ) : !expenses || expenses.length === 0 ? (
-        <Card className="text-center py-8 text-text-muted text-sm font-medium card-shadow">
-          {t('noExpenses')}
-        </Card>
+        <p className="text-center py-8 text-text-muted text-sm font-medium">{t('noExpenses')}</p>
       ) : (
         <div className="space-y-3">
           {expenses.map((exp) => (
-            <Card key={exp.id} className="space-y-3 card-shadow">
+            <div
+              key={exp.id}
+              className="p-4 rounded-token border border-border bg-surface-elevated/30 space-y-3"
+            >
               <div className="flex items-center justify-between pb-2 border-b border-border">
                 <div>
-                  <span className="font-bold text-text-primary text-base block">
-                    {exp.shopper?.user?.name || 'Shopper'}
+                  <span className="font-bold text-text-primary text-sm sm:text-base block">
+                    {exp.shopper?.user?.name || tCommon('member')}
                   </span>
                   <span className="text-xs text-text-muted">{exp.date}</span>
                 </div>
                 <div className="text-right">
-                  <span className="font-extrabold text-lg text-primary block">
+                  <span className="font-extrabold text-base sm:text-lg text-primary block">
                     {formatDigit(exp.total)} {tCommon('bdt')}
                   </span>
                   <span
-                    className={`text-2xs px-2 py-0.5 rounded-full font-bold ${
-                      exp.status === 'APPROVED'
-                        ? 'bg-success/15 text-success'
-                        : 'bg-warning/15 text-warning'
+                    className={`text-xs px-2 py-0.5 rounded-full font-semibold ${
+                      exp.status === ExpenseStatus.APPROVED
+                        ? 'bg-success-surface text-success'
+                        : exp.status === ExpenseStatus.REJECTED
+                          ? 'bg-danger-surface text-danger'
+                          : 'bg-warning-surface text-warning'
                     }`}
                   >
-                    {exp.status}
+                    {getStatusLabel(exp.status)}
                   </span>
                 </div>
               </div>
 
-              {/* Items List */}
               <div className="divide-y divide-border text-sm">
                 {exp.items.map((item) => (
-                  <div key={item.id} className="py-1.5 flex items-center justify-between">
+                  <div key={item.id} className="py-1.5 flex items-center justify-between gap-2">
                     <span className="text-text-primary font-medium">
-                      {item.name}{' '}
+                      {item.name}
                       {item.quantity && (
-                        <span className="text-text-muted text-xs">({item.quantity})</span>
+                        <span className="text-text-muted text-xs ml-1.5">({item.quantity})</span>
                       )}
                     </span>
-                    <span className="font-semibold text-text-secondary">
+                    <span className="font-semibold text-text-secondary whitespace-nowrap">
                       {formatDigit(item.price)} {tCommon('bdt')}
                     </span>
                   </div>
                 ))}
               </div>
 
-              <div className="flex items-center justify-between pt-2 border-t border-border">
-                {exp.receiptUrl ? (
-                  <a
-                    href={exp.receiptUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="text-xs text-primary hover:underline font-semibold"
-                  >
-                    {t('viewReceipt')}
-                  </a>
-                ) : (
-                  <div />
-                )}
-                {isManager && exp.status === 'PENDING' && (
-                  <Button
-                    size="sm"
-                    variant="secondary"
-                    onClick={() => approveMutation.mutate(exp.id)}
-                    isLoading={approveMutation.isPending}
-                  >
-                    {t('approveExpense')}
-                  </Button>
-                )}
-              </div>
-            </Card>
+              {(exp.receiptUrl || (isManager && exp.status === ExpenseStatus.PENDING)) && (
+                <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-border">
+                  {exp.receiptUrl ? (
+                    <a
+                      href={exp.receiptUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-xs text-primary hover:underline font-semibold"
+                    >
+                      {t('viewReceipt')}
+                    </a>
+                  ) : (
+                    <div />
+                  )}
+
+                  {isManager && exp.status === ExpenseStatus.PENDING && (
+                    <div className="flex gap-2">
+                      <Button
+                        size="sm"
+                        variant="danger"
+                        onClick={() => decisionMutation.mutate({ id: exp.id, action: 'reject' })}
+                        isLoading={decisionMutation.isPending}
+                      >
+                        {t('rejectExpense')}
+                      </Button>
+                      <Button
+                        size="sm"
+                        onClick={() => decisionMutation.mutate({ id: exp.id, action: 'approve' })}
+                        isLoading={decisionMutation.isPending}
+                      >
+                        {t('approveExpense')}
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
           ))}
         </div>
       )}
@@ -233,7 +251,7 @@ export const ShoppingExpenses: React.FC<ShoppingExpensesProps> = ({
                 <div key={idx} className="flex gap-2 items-center">
                   <input
                     placeholder={t('itemName')}
-                    className="h-10 px-3 flex-1 bg-surface border border-border rounded-token text-sm text-text-primary"
+                    className="h-10 px-3 flex-1 min-w-0 bg-surface border border-border rounded-token text-sm text-text-primary"
                     value={item.name}
                     onChange={(e) => updateItemRow(idx, 'name', e.target.value)}
                   />
@@ -246,7 +264,8 @@ export const ShoppingExpenses: React.FC<ShoppingExpensesProps> = ({
                   <input
                     placeholder={t('price')}
                     type="number"
-                    step="0.5"
+                    step="1"
+                    min="0"
                     className="h-10 px-2 w-24 bg-surface border border-border rounded-token text-sm text-text-primary text-right"
                     value={item.price || ''}
                     onChange={(e) => updateItemRow(idx, 'price', e.target.value)}
@@ -272,6 +291,7 @@ export const ShoppingExpenses: React.FC<ShoppingExpensesProps> = ({
             </Button>
             <Button
               size="sm"
+              disabled={!hasValidItems}
               isLoading={recordMutation.isPending}
               onClick={() => recordMutation.mutate()}
             >
@@ -280,6 +300,6 @@ export const ShoppingExpenses: React.FC<ShoppingExpensesProps> = ({
           </div>
         </div>
       </Modal>
-    </div>
+    </Card>
   );
 };

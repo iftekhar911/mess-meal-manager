@@ -3,10 +3,15 @@
 import React, { useState } from 'react';
 import { useTranslations, useLocale } from 'next-intl';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { ShoppingRosterDto, toBengaliDigits, getDhakaDateString } from '@mess/shared';
+import {
+  MembershipDto,
+  ShoppingRosterDto,
+  toBengaliDigits,
+  getDhakaDateString
+} from '@mess/shared';
 import { Card } from '../../ui/card';
 import { Button } from '../../ui/button';
-import { Input } from '../../ui/input';
+import { Select } from '../../ui/select';
 import { Modal } from '../../ui/modal';
 import { apiFetch } from '../../../lib/api-client';
 
@@ -19,7 +24,8 @@ export interface RosterCalendarProps {
 }
 
 /**
- * Monthly shopping roster calendar supporting voting, auto-shuffle, and swaps.
+ * Monthly shopping roster calendar supporting self-volunteering, manager auto-fill,
+ * and member-dropdown swaps.
  */
 export const RosterCalendar: React.FC<RosterCalendarProps> = ({
   messId,
@@ -28,20 +34,28 @@ export const RosterCalendar: React.FC<RosterCalendarProps> = ({
   shoppersPerDay = 2,
   token
 }) => {
-  const t = useTranslations('nav');
+  const t = useTranslations('shopper');
   const tCommon = useTranslations('common');
   const locale = useLocale();
   const queryClient = useQueryClient();
 
   const currentMonth = getDhakaDateString().slice(0, 7);
   const [selectedMonth] = useState(currentMonth);
-
   const [isSwapModalOpen, setIsSwapModalOpen] = useState(false);
   const [selectedRosterId, setSelectedRosterId] = useState<string | null>(null);
   const [targetMemberId, setTargetMemberId] = useState('');
 
   const formatDigit = (val: number | string) => {
     return locale === 'bn' ? toBengaliDigits(val) : String(val);
+  };
+
+  const formatDateLabel = (dateStr: string) => {
+    const [y, m, d] = dateStr.split('-').map(Number);
+    if (!y || !m || !d) return dateStr;
+    return new Intl.DateTimeFormat(locale === 'bn' ? 'bn-BD' : 'en-US', {
+      day: 'numeric',
+      month: 'short'
+    }).format(new Date(Date.UTC(y, m - 1, d)));
   };
 
   const { data: roster, isLoading } = useQuery<ShoppingRosterDto[]>({
@@ -51,15 +65,17 @@ export const RosterCalendar: React.FC<RosterCalendarProps> = ({
     enabled: !!messId
   });
 
-  // Vote mutation
+  const { data: members } = useQuery<MembershipDto[]>({
+    queryKey: ['mess-members', messId],
+    queryFn: () => apiFetch<MembershipDto[]>(`/messes/${messId}/members`, {}, token),
+    enabled: !!messId
+  });
+
   const voteMutation = useMutation({
     mutationFn: (date: string) =>
       apiFetch(
         `/messes/${messId}/roster/vote`,
-        {
-          method: 'POST',
-          body: JSON.stringify({ date })
-        },
+        { method: 'POST', body: JSON.stringify({ date }) },
         token
       ),
     onSuccess: () => {
@@ -67,14 +83,11 @@ export const RosterCalendar: React.FC<RosterCalendarProps> = ({
     }
   });
 
-  // Auto-shuffle mutation
   const shuffleMutation = useMutation({
     mutationFn: () =>
       apiFetch(
         `/messes/${messId}/roster/auto-shuffle?month=${selectedMonth}`,
-        {
-          method: 'POST'
-        },
+        { method: 'POST' },
         token
       ),
     onSuccess: () => {
@@ -82,7 +95,6 @@ export const RosterCalendar: React.FC<RosterCalendarProps> = ({
     }
   });
 
-  // Swap mutation
   const swapMutation = useMutation({
     mutationFn: () =>
       apiFetch(
@@ -98,116 +110,133 @@ export const RosterCalendar: React.FC<RosterCalendarProps> = ({
       ),
     onSuccess: () => {
       setIsSwapModalOpen(false);
+      setTargetMemberId('');
+      setSelectedRosterId(null);
       queryClient.invalidateQueries({ queryKey: ['roster', messId] });
     }
   });
 
-  const [year, m] = selectedMonth.split('-').map(Number);
-  const daysInMonth = new Date(Date.UTC(year!, m!, 0)).getUTCDate();
+  const [year, monthNum] = selectedMonth.split('-').map(Number);
+  const daysInMonth = new Date(Date.UTC(year!, monthNum!, 0)).getUTCDate() || 30;
+  const todayStr = getDhakaDateString();
 
-  const daysList = Array.from({ length: daysInMonth }, (_, i) => {
-    const day = i + 1;
-    const dateStr = `${selectedMonth}-${String(day).padStart(2, '0')}`;
-    const dayAssignments = (roster || []).filter((r) => r.date === dateStr);
-    const hasVoted = dayAssignments.some((r) => r.membershipId === membershipId);
-    const isFull = dayAssignments.length >= shoppersPerDay;
-    return {
-      day,
-      dateStr,
-      assignments: dayAssignments,
-      hasVoted,
-      isFull
-    };
+  // Show upcoming days from today first (or all days of the month)
+  const days = Array.from({ length: daysInMonth }, (_, i) => {
+    const dayStr = String(i + 1).padStart(2, '0');
+    return `${selectedMonth}-${dayStr}`;
   });
 
+  const memberOptions = [
+    { value: '', label: t('selectSwapMember') },
+    ...(members || []).map((m) => ({
+      value: m.id,
+      label: `${m.user?.name || 'Member'} (${m.user?.phone || ''})`
+    }))
+  ];
+
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h3 className="font-semibold text-lg text-text-primary">{t('shopping')}</h3>
+    <Card className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-border">
+        <h3 className="font-bold text-base sm:text-lg text-text-primary">{t('rosterTitle')}</h3>
         {isManager && (
           <Button
             size="sm"
             variant="secondary"
-            isLoading={shuffleMutation.isPending}
             onClick={() => shuffleMutation.mutate()}
+            isLoading={shuffleMutation.isPending}
           >
-            {tCommon('actions')}
+            {t('autoShuffle')}
           </Button>
         )}
       </div>
 
       {isLoading ? (
-        <p className="text-sm text-text-secondary">{tCommon('loading')}</p>
+        <p className="text-sm text-text-secondary py-6 text-center">{tCommon('loading')}</p>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-          {daysList.map((d) => (
-            <Card key={d.dateStr} className="p-3 flex flex-col justify-between">
-              <div>
-                <div className="flex items-center justify-between pb-2 border-b border-border">
-                  <span className="font-bold text-sm text-text-primary">
-                    {formatDigit(d.day)} {selectedMonth}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 max-h-[420px] overflow-y-auto pr-1">
+          {days.map((dateStr) => {
+            const entries = (roster || []).filter((r) => r.date === dateStr);
+            const myEntry = entries.find((e) => e.membershipId === membershipId);
+            const isFull = entries.length >= shoppersPerDay;
+            const isToday = dateStr === todayStr;
+
+            return (
+              <div
+                key={dateStr}
+                className={`p-3 rounded-token border flex flex-col justify-between gap-2 transition-colors ${
+                  isToday
+                    ? 'border-primary bg-primary-surface/50'
+                    : 'border-border bg-surface-elevated/40'
+                }`}
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-sm font-bold text-text-primary">
+                    {formatDateLabel(dateStr)}
+                    {isToday && (
+                      <span className="ml-1.5 text-xs font-semibold text-primary">
+                        ({tCommon('today')})
+                      </span>
+                    )}
                   </span>
-                  <span className="text-xs text-text-muted">
-                    {formatDigit(d.assignments.length)} / {formatDigit(shoppersPerDay)}
+                  <span className="text-xs font-medium text-text-muted">
+                    {formatDigit(entries.length)} / {formatDigit(shoppersPerDay)}
                   </span>
                 </div>
 
-                <div className="py-2 space-y-1.5 min-h-[50px]">
-                  {d.assignments.length === 0 ? (
-                    <span className="text-xs text-text-muted italic">{tCommon('status')}</span>
+                <div className="space-y-1">
+                  {entries.length === 0 ? (
+                    <span className="text-xs text-text-muted">{t('unassigned')}</span>
                   ) : (
-                    d.assignments.map((a) => (
-                      <div
-                        key={a.id}
-                        className="flex items-center justify-between text-xs bg-surface-elevated px-2 py-1 rounded-token"
-                      >
-                        <span className="font-medium text-text-primary">
-                          {a.member?.user?.name || 'Shopper'}
+                    entries.map((entry) => (
+                      <div key={entry.id} className="flex items-center justify-between gap-2">
+                        <span className="text-xs font-semibold text-text-primary truncate">
+                          {entry.member?.user?.name || tCommon('member')}
                         </span>
-                        {a.membershipId === membershipId && (
+                        {(entry.membershipId === membershipId || isManager) && (
                           <button
                             type="button"
                             onClick={() => {
-                              setSelectedRosterId(a.id);
+                              setSelectedRosterId(entry.id);
+                              setTargetMemberId('');
                               setIsSwapModalOpen(true);
                             }}
-                            className="text-primary hover:underline text-[10px]"
+                            className="text-xs font-semibold text-primary hover:underline cursor-pointer shrink-0"
                           >
-                            {tCommon('edit')}
+                            {t('swapShopper')}
                           </button>
                         )}
                       </div>
                     ))
                   )}
                 </div>
-              </div>
 
-              {!d.hasVoted && !d.isFull && (
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  className="w-full mt-2"
-                  isLoading={voteMutation.isPending}
-                  onClick={() => voteMutation.mutate(d.dateStr)}
-                >
-                  {tCommon('confirm')}
-                </Button>
-              )}
-            </Card>
-          ))}
+                {!myEntry && !isFull && (
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    className="w-full h-8 text-xs"
+                    onClick={() => voteMutation.mutate(dateStr)}
+                    isLoading={voteMutation.isPending}
+                  >
+                    {t('volunteer')}
+                  </Button>
+                )}
+              </div>
+            );
+          })}
         </div>
       )}
 
-      {/* Swap Request Modal */}
+      {/* Swap Shopper Modal with Member Dropdown */}
       <Modal
         isOpen={isSwapModalOpen}
         onClose={() => setIsSwapModalOpen(false)}
-        title={tCommon('edit')}
+        title={t('swapShopper')}
       >
         <div className="space-y-4">
-          <Input
-            label="Target Boarder Membership ID"
-            placeholder="Paste member UUID"
+          <Select
+            label={t('selectSwapMember')}
+            options={memberOptions}
             value={targetMemberId}
             onChange={(e) => setTargetMemberId(e.target.value)}
           />
@@ -218,6 +247,7 @@ export const RosterCalendar: React.FC<RosterCalendarProps> = ({
             </Button>
             <Button
               size="sm"
+              disabled={!targetMemberId}
               isLoading={swapMutation.isPending}
               onClick={() => swapMutation.mutate()}
             >
@@ -226,6 +256,6 @@ export const RosterCalendar: React.FC<RosterCalendarProps> = ({
           </div>
         </div>
       </Modal>
-    </div>
+    </Card>
   );
 };
