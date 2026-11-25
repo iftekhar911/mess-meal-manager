@@ -46,7 +46,7 @@ export async function ensureSchema(): Promise<void> {
     CREATE TABLE IF NOT EXISTS mm_messes (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       name TEXT NOT NULL,
-      cutoff_time TEXT NOT NULL DEFAULT '22:00:00',
+      cutoff_time TEXT NOT NULL DEFAULT '16:00:00',
       meal_rate NUMERIC(10, 2) NOT NULL DEFAULT 50.00,
       grace_days INT NOT NULL DEFAULT 3,
       warning_days INT NOT NULL DEFAULT 2,
@@ -207,6 +207,18 @@ export async function ensureSchema(): Promise<void> {
       UNIQUE (mess_id, effective_from)
     );
 
+    CREATE TABLE IF NOT EXISTS mm_fard_items (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      mess_id UUID NOT NULL REFERENCES mm_messes(id) ON DELETE CASCADE,
+      date TEXT NOT NULL,
+      name TEXT NOT NULL,
+      quantity TEXT NOT NULL DEFAULT '',
+      estimated_price NUMERIC(10, 2) NOT NULL DEFAULT 0.00,
+      is_checked BOOLEAN NOT NULL DEFAULT FALSE,
+      created_by UUID REFERENCES mm_users(id) ON DELETE SET NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
     CREATE INDEX IF NOT EXISTS idx_mm_memberships_mess ON mm_memberships(mess_id);
     CREATE INDEX IF NOT EXISTS idx_mm_memberships_user ON mm_memberships(user_id);
     CREATE INDEX IF NOT EXISTS idx_mm_overrides_mess_date ON mm_meal_overrides(mess_id, date);
@@ -215,6 +227,7 @@ export async function ensureSchema(): Promise<void> {
     CREATE INDEX IF NOT EXISTS idx_mm_expenses_mess_date ON mm_shopping_expenses(mess_id, date);
     CREATE INDEX IF NOT EXISTS idx_mm_join_req_mess ON mm_join_requests(mess_id, status);
     CREATE INDEX IF NOT EXISTS idx_mm_rate_hist_mess ON mm_rate_history(mess_id, effective_from);
+    CREATE INDEX IF NOT EXISTS idx_mm_fard_mess_date ON mm_fard_items(mess_id, date);
   `);
 
   globalForPg.schemaInitialized = true;

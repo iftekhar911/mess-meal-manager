@@ -345,10 +345,84 @@ export async function handleFinanceRoute(
     }
   }
 
-  // LEDGER
+  // FARD (Daily Shopping List - public read, shopper/manager write)
+  if (resource === 'fard') {
+    if (subSegments.length === 1 && method === 'GET') {
+      const date = req.nextUrl.searchParams.get('date') || getDhakaDateString();
+      const res = await pool.query(
+        `SELECT * FROM mm_fard_items WHERE mess_id = $1 AND date = $2 ORDER BY created_at ASC`,
+        [messId, date]
+      );
+      return NextResponse.json({
+        data: res.rows.map((r) => ({
+          id: r.id,
+          messId: r.mess_id,
+          date: r.date,
+          name: r.name,
+          quantity: r.quantity,
+          estimatedPrice: Number(r.estimated_price).toFixed(2),
+          isChecked: Boolean(r.is_checked),
+          createdAt: new Date(r.created_at).toISOString()
+        }))
+      });
+    }
+
+    if (subSegments.length === 1 && method === 'POST') {
+      const date = String(body.date || getDhakaDateString());
+      const name = String(body.name || '').trim();
+      const quantity = String(body.quantity || '').trim();
+      const estimatedPrice = Math.max(0, Number(body.estimatedPrice || 0)).toFixed(2);
+      if (!name) throw new HttpError(400, 'VALIDATION_FAILED', 'Item name is required');
+
+      const res = await pool.query(
+        `INSERT INTO mm_fard_items (mess_id, date, name, quantity, estimated_price, is_checked, created_by)
+         VALUES ($1, $2, $3, $4, $5, FALSE, $6)
+         RETURNING *`,
+        [messId, date, name, quantity, estimatedPrice, user.id]
+      );
+      return NextResponse.json({ data: res.rows[0] }, { status: 201 });
+    }
+
+    if (subSegments.length === 2 && method === 'PATCH') {
+      const itemId = subSegments[1]!;
+      const res = await pool.query(
+        `UPDATE mm_fard_items
+         SET is_checked = COALESCE($3, is_checked),
+             name = COALESCE($4, name),
+             quantity = COALESCE($5, quantity),
+             estimated_price = COALESCE($6, estimated_price)
+         WHERE id = $1 AND mess_id = $2
+         RETURNING *`,
+        [
+          itemId,
+          messId,
+          body.isChecked !== undefined ? Boolean(body.isChecked) : null,
+          body.name !== undefined ? String(body.name).trim() : null,
+          body.quantity !== undefined ? String(body.quantity).trim() : null,
+          body.estimatedPrice !== undefined ? Number(body.estimatedPrice).toFixed(2) : null
+        ]
+      );
+      if (!res.rows[0]) throw new HttpError(404, 'NOT_FOUND', 'Fard item not found');
+      return NextResponse.json({ data: res.rows[0] });
+    }
+
+    if (subSegments.length === 2 && method === 'DELETE') {
+      const itemId = subSegments[1]!;
+      await pool.query(`DELETE FROM mm_fard_items WHERE id = $1 AND mess_id = $2`, [
+        itemId,
+        messId
+      ]);
+      return NextResponse.json({ data: { success: true } });
+    }
+  }
+
+  // LEDGER (strictly private to member themselves or Manager)
   if (resource === 'ledger') {
     if (subSegments[1] === 'balance' && subSegments[2] && method === 'GET') {
       const targetMemId = subSegments[2]!;
+      if (targetMemId !== membership.id && membership.role !== MembershipRole.MANAGER) {
+        throw new HttpError(403, 'FORBIDDEN', 'Deposits and balances are private');
+      }
       const messRes = await pool.query(`SELECT * FROM mm_messes WHERE id = $1`, [messId]);
       if (!messRes.rows[0]) throw new HttpError(404, 'NOT_FOUND', 'Mess not found');
       const evalResult = await evaluateMemberBalance(mapMessRow(messRes.rows[0]), targetMemId);
@@ -357,6 +431,9 @@ export async function handleFinanceRoute(
 
     if (subSegments[1] === 'statement' && subSegments[2] && method === 'GET') {
       const targetMemId = subSegments[2]!;
+      if (targetMemId !== membership.id && membership.role !== MembershipRole.MANAGER) {
+        throw new HttpError(403, 'FORBIDDEN', 'Deposits and balances are private');
+      }
       const res = await pool.query(
         `SELECT * FROM mm_ledger_entries
          WHERE mess_id = $1 AND membership_id = $2
@@ -783,6 +860,11 @@ export async function handleFinanceRoute(
         };
       });
 
+      const isManagerCaller = membership.role === MembershipRole.MANAGER;
+      const visibleMembers = isManagerCaller
+        ? memberStatements
+        : memberStatements.filter((m) => m.membershipId === membership.id);
+
       const statement: MonthStatementDto = {
         messName: mess.name,
         month,
@@ -792,8 +874,10 @@ export async function handleFinanceRoute(
         totalMeals: totalMessMeals.toNumber(),
         totalMarketCost: totalMarketCost.toFixed(2),
         totalFuelCost: totalFuelCost.toFixed(2),
-        totalDeposits: totalDeposits.toFixed(2),
-        members: memberStatements
+        totalDeposits: isManagerCaller
+          ? totalDeposits.toFixed(2)
+          : visibleMembers[0]?.totalDeposits || '0.00',
+        members: visibleMembers
       };
 
       return NextResponse.json({ data: statement });

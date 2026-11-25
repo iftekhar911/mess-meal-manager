@@ -14,6 +14,7 @@ import { HttpError, requireAuth, requireMembership } from '../auth';
 import {
   MealDefaultRow,
   MealOverrideRow,
+  evaluateMemberBalance,
   mapMessRow,
   resolveSlot,
   writeAuditLog
@@ -190,6 +191,47 @@ export async function handleMealRoute(
     return NextResponse.json({ data: res.rows[0] });
   }
 
+  // POST /meals/leave/:membershipId (date-range leave: turns off lunch + dinner from startDate to endDate)
+  if (action === 'leave' && method === 'POST') {
+    const targetMemId = subSegments[2] || membership.id;
+    if (targetMemId !== membership.id && membership.role !== MembershipRole.MANAGER) {
+      throw new HttpError(403, 'FORBIDDEN', 'You can only set leave for yourself');
+    }
+
+    const startDate = String(body.startDate || '');
+    const endDate = String(body.endDate || '');
+    if (
+      !/^\d{4}-\d{2}-\d{2}$/.test(startDate) ||
+      !/^\d{4}-\d{2}-\d{2}$/.test(endDate) ||
+      endDate < startDate
+    ) {
+      throw new HttpError(400, 'VALIDATION_FAILED', 'Please select a valid date range');
+    }
+
+    const start = new Date(`${startDate}T00:00:00Z`);
+    const end = new Date(`${endDate}T00:00:00Z`);
+    const diffDays = Math.floor((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
+    if (diffDays > 60) {
+      throw new HttpError(400, 'VALIDATION_FAILED', 'Date range cannot exceed 60 days');
+    }
+
+    for (let i = 0; i <= diffDays; i++) {
+      const cur = new Date(start.getTime() + i * 86400000);
+      const dateStr = cur.toISOString().slice(0, 10);
+      for (const slot of [SlotType.LUNCH, SlotType.DINNER]) {
+        await pool.query(
+          `INSERT INTO mm_meal_overrides (membership_id, mess_id, date, slot, status, egg_preference, guest_count, is_manager_override, updated_at)
+           VALUES ($1, $2, $3, $4, FALSE, 'NONE', 0, FALSE, NOW())
+           ON CONFLICT (membership_id, date, slot)
+           DO UPDATE SET status = FALSE, guest_count = 0, updated_at = NOW()`,
+          [targetMemId, messId, dateStr, slot]
+        );
+      }
+    }
+
+    return NextResponse.json({ data: { success: true, days: diffDays + 1 } });
+  }
+
   // POST /meals/force-override (MANAGER ONLY)
   if (action === 'force-override' && method === 'POST') {
     if (membership.role !== MembershipRole.MANAGER) {
@@ -271,8 +313,26 @@ export async function handleMealRoute(
       ovMap.set(`${o.membership_id}:${o.date}:${o.slot}`, o);
     }
 
+    const todayStr = getDhakaDateString();
+    const messRowRes = await pool.query(`SELECT * FROM mm_messes WHERE id = $1`, [messId]);
+    const messObj = messRowRes.rows[0] ? mapMessRow(messRowRes.rows[0]) : null;
+
+    const autoOffSet = new Set<string>();
+    if (messObj) {
+      const evals = await Promise.all(
+        membersRes.rows.map(async (m) => ({
+          id: m.id as string,
+          bal: await evaluateMemberBalance(messObj, m.id)
+        }))
+      );
+      for (const item of evals) {
+        if (item.bal.isAutoOff) autoOffSet.add(item.id);
+      }
+    }
+
     const rows = membersRes.rows.map((m) => {
       const def = defMap.get(m.id);
+      const memberAutoOff = autoOffSet.has(m.id);
       const days: Record<
         string,
         { lunch: boolean; dinner: boolean; isAutoOff: boolean; guestCount: number }
@@ -281,27 +341,28 @@ export async function handleMealRoute(
 
       for (let d = 1; d <= daysInMonth; d++) {
         const dateStr = `${month}-${String(d).padStart(2, '0')}`;
-        const lunch = resolveSlot(
-          def,
-          ovMap.get(`${m.id}:${dateStr}:${SlotType.LUNCH}`),
-          dateStr,
-          SlotType.LUNCH
-        );
-        const dinner = resolveSlot(
-          def,
-          ovMap.get(`${m.id}:${dateStr}:${SlotType.DINNER}`),
-          dateStr,
-          SlotType.DINNER
-        );
+        const lunchOv = ovMap.get(`${m.id}:${dateStr}:${SlotType.LUNCH}`);
+        const dinnerOv = ovMap.get(`${m.id}:${dateStr}:${SlotType.DINNER}`);
+        const lunch = resolveSlot(def, lunchOv, dateStr, SlotType.LUNCH);
+        const dinner = resolveSlot(def, dinnerOv, dateStr, SlotType.DINNER);
 
-        if (lunch.status) totalMeals += 0.5 + lunch.guestCount * 0.5;
-        if (dinner.status) totalMeals += 0.5 + dinner.guestCount * 0.5;
+        const isSlotAutoOff =
+          memberAutoOff &&
+          dateStr >= todayStr &&
+          !lunchOv?.is_manager_override &&
+          !dinnerOv?.is_manager_override;
+
+        const finalLunch = isSlotAutoOff ? false : lunch.status;
+        const finalDinner = isSlotAutoOff ? false : dinner.status;
+
+        if (finalLunch) totalMeals += 0.5 + lunch.guestCount * 0.5;
+        if (finalDinner) totalMeals += 0.5 + dinner.guestCount * 0.5;
 
         days[dateStr] = {
-          lunch: lunch.status,
-          dinner: dinner.status,
-          isAutoOff: lunch.isAutoOff || dinner.isAutoOff,
-          guestCount: lunch.guestCount + dinner.guestCount
+          lunch: finalLunch,
+          dinner: finalDinner,
+          isAutoOff: isSlotAutoOff,
+          guestCount: isSlotAutoOff ? 0 : lunch.guestCount + dinner.guestCount
         };
       }
 

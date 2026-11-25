@@ -234,26 +234,34 @@ export async function evaluateMemberBalance(
   const todayRate = resolveRateForDate(rateHistory, fallbackRates, today);
   const currentBalance = deposits.minus(otherDebits).minus(estimatedMealCost);
   const dailyEstimatedCost = todayRate.mealRate.gt(0) ? todayRate.mealRate : new Decimal(50);
-  const daysRemaining = dailyEstimatedCost.gt(0)
+  const rawDaysRemaining = dailyEstimatedCost.gt(0)
     ? currentBalance.div(dailyEstimatedCost).floor().toNumber()
     : 0;
 
   let status = BalanceStatus.HEALTHY;
-  if (daysRemaining <= 0) {
-    status =
-      Math.abs(daysRemaining) > mess.graceDays ? BalanceStatus.AUTO_OFF : BalanceStatus.GRACE;
-  } else if (daysRemaining <= mess.warningDays) {
+  let graceDaysUsed = 0;
+
+  if (currentBalance.lt(0)) {
+    const deficitDays = dailyEstimatedCost.gt(0)
+      ? currentBalance.abs().div(dailyEstimatedCost).ceil().toNumber()
+      : 1;
+    graceDaysUsed = Math.min(mess.graceDays, deficitDays);
+    if (deficitDays > mess.graceDays) {
+      status = BalanceStatus.AUTO_OFF;
+    } else {
+      status = BalanceStatus.GRACE;
+    }
+  } else if (rawDaysRemaining <= mess.warningDays) {
     status = BalanceStatus.WARNING;
   }
 
   return {
     currentBalance: currentBalance.toFixed(2),
     dailyEstimatedCost: dailyEstimatedCost.toFixed(2),
-    daysRemaining: Math.max(0, daysRemaining),
+    daysRemaining: Math.max(0, rawDaysRemaining),
     status,
-    graceDaysUsed: daysRemaining < 0 ? Math.min(mess.graceDays, Math.abs(daysRemaining)) : 0,
-    graceDaysLeft:
-      daysRemaining < 0 ? Math.max(0, mess.graceDays - Math.abs(daysRemaining)) : mess.graceDays,
+    graceDaysUsed,
+    graceDaysLeft: Math.max(0, mess.graceDays - graceDaysUsed),
     isAutoOff: status === BalanceStatus.AUTO_OFF
   };
 }

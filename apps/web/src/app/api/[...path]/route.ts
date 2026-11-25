@@ -68,7 +68,8 @@ async function dispatch(
         resource === 'expenses' ||
         resource === 'ledger' ||
         resource === 'reports' ||
-        resource === 'rates'
+        resource === 'rates' ||
+        resource === 'fard'
       ) {
         return await handleFinanceRoute(req, messId, subSegments, body);
       }

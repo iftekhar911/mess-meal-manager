@@ -91,12 +91,12 @@ export async function handleMessRootRoute(
        RETURNING *`,
       [
         name,
-        String(body.cutoffTime || '22:00:00'),
+        String(body.cutoffTime || '16:00:00'),
         Number(body.mealRate || 50).toFixed(2),
-        Number(body.graceDays ?? 3),
-        Number(body.warningDays ?? 2),
-        Number(body.shoppersPerDay ?? 2),
-        Number(body.shopTimesPerMonth ?? 2)
+        Math.max(0, Number(body.graceDays ?? 3)),
+        Math.max(0, Number(body.warningDays ?? 2)),
+        Math.max(1, Number(body.shoppersPerDay ?? 2)),
+        Math.max(1, Number(body.shopTimesPerMonth ?? 2))
       ]
     );
     const mess = mapMessRow(messRes.rows[0]);
