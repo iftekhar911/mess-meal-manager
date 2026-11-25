@@ -1,4 +1,8 @@
 {
+  "meta": {
+    "title": "Mess Meal Manager",
+    "description": "Daily meal tracking, shopping fard, roster, and transparent accounting for shared messes"
+  },
   "common": {
     "appName": "Mess Meal Manager",
     "tagline": "Daily meal tracking, automatic shopper summaries, and transparent accounting for shared messes",

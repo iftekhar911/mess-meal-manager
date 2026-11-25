@@ -1,6 +1,7 @@
 import { ApiErrorResponse } from '@mess/shared';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || '/api';
+const DEFAULT_TIMEOUT_MS = 10000;
 
 export class ApiClientError extends Error {
   constructor(
@@ -14,20 +15,25 @@ export class ApiClientError extends Error {
   }
 }
 
+export interface ApiFetchOptions extends RequestInit {
+  timeoutMs?: number;
+}
+
 /**
- * Universal API fetch wrapper sending requests to the real PostgreSQL-backed API
- * with Bearer token, httpOnly cookie credentials, and structured error handling.
+ * Universal API fetch wrapper with timeout protection, Bearer token injection,
+ * httpOnly cookie credentials, and structured error handling.
  */
 export async function apiFetch<T>(
   endpoint: string,
-  options: RequestInit = {},
+  options: ApiFetchOptions = {},
   token?: string,
   messId?: string
 ): Promise<T> {
+  const { timeoutMs = DEFAULT_TIMEOUT_MS, ...fetchOptions } = options;
   const normalizedEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
   const url = `${API_BASE_URL}${normalizedEndpoint}`;
 
-  const headers = new Headers(options.headers || {});
+  const headers = new Headers(fetchOptions.headers || {});
   if (!headers.has('Content-Type')) {
     headers.set('Content-Type', 'application/json');
   }
@@ -40,11 +46,28 @@ export async function apiFetch<T>(
     headers.set('x-mess-id', messId);
   }
 
-  const response = await fetch(url, {
-    ...options,
-    headers,
-    credentials: 'include'
-  });
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      ...fetchOptions,
+      headers,
+      credentials: 'include',
+      signal: controller.signal
+    });
+  } catch (err: unknown) {
+    clearTimeout(timer);
+    const isTimeout = err instanceof DOMException && err.name === 'AbortError';
+    throw new ApiClientError(
+      503,
+      'NETWORK_ERROR',
+      isTimeout ? 'Request timed out' : 'Network request failed'
+    );
+  } finally {
+    clearTimeout(timer);
+  }
 
   if (!response.ok) {
     let errorData: ApiErrorResponse;
@@ -54,7 +77,7 @@ export async function apiFetch<T>(
       errorData = {
         statusCode: response.status,
         errorCode: 'FETCH_ERROR',
-        message: response.statusText || 'Network request failed',
+        message: response.statusText || 'Request failed',
         timestamp: new Date().toISOString(),
         path: endpoint
       };
