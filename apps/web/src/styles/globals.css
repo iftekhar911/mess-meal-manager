@@ -5,21 +5,22 @@
 :root {
   --radius: 0.75rem;
 
-  /* Theme tokens: crisp, modern, high-contrast palette */
-  --color-bg: #f8fafc;
+  /* Calm brand palette: Deep Teal brand + neutral surfaces; green/yellow/red strictly for status */
+  --color-bg: #f4f7f7;
   --color-surface: #ffffff;
-  --color-surface-elevated: #f1f5f9;
-  --color-border: #e2e8f0;
-  --color-border-strong: #cbd5e1;
+  --color-surface-elevated: #edf2f2;
+  --color-border: #dce5e5;
+  --color-border-strong: #c2d1d1;
 
   --color-text-primary: #0f172a;
   --color-text-secondary: #334155;
   --color-text-muted: #64748b;
 
-  --color-primary: #059669;
-  --color-primary-hover: #047857;
-  --color-primary-surface: #ecfdf5;
+  --color-primary: #0f766e;
+  --color-primary-hover: #115e59;
+  --color-primary-surface: #f0fdfa;
 
+  /* Status colors only */
   --color-success: #16a34a;
   --color-success-surface: #f0fdf4;
 
@@ -47,21 +48,12 @@
   }
 }
 
-/* Accessible focus ring applied consistently */
 .focus-ring {
   @apply outline-none ring-2 ring-primary ring-offset-2 ring-offset-background;
 }
 
-/* Subtle card shadow */
 .card-shadow {
-  box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.05), 0 1px 2px -1px rgb(0 0 0 / 0.05);
-}
-
-.card-shadow-hover {
-  transition: all 0.2s ease-in-out;
-}
-.card-shadow-hover:hover {
-  box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.08), 0 2px 4px -2px rgb(0 0 0 / 0.06);
+  box-shadow: 0 1px 3px 0 rgb(15 23 42 / 0.05), 0 1px 2px -1px rgb(15 23 42 / 0.04);
 }
 
 @media print {
